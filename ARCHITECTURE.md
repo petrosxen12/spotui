@@ -1,165 +1,70 @@
 # spotui Architecture
 
 ## Overview
-spotui is a minimal Spotify controller with a terminal user interface (TUI) built with Bubble Tea. It controls existing Spotify Connect devices via the Spotify Web API.
+`spotui` now has two front ends: a Cobra CLI and a Bubble Tea TUI. The service layer introduced in Phase 2 remains the boundary that keeps both front ends from reaching into Spotify HTTP details directly.
 
-## Core Assumptions & Constraints
+## Package Boundaries
 
-### 1. Playback Model
-- **External playback only**: spotui does NOT stream audio. It sends commands to existing Spotify Connect devices (desktop app, mobile, web player, smart speakers).
-- **Active device requirement**: User must have an active Spotify Connect device running. If no device is available, playback commands will fail gracefully.
-- **Premium requirement**: Most playback endpoints (`/me/player/*`) require Spotify Premium. Non-premium accounts will receive clear error messages.
+### `cmd/spotui`
+- Parses arguments and prints output.
+- Starts either CLI commands or the `tui` subcommand.
+- Depends on `internal/app` for behavior and `internal/config` for login/config bootstrap.
+- Does not call `internal/spotify` directly.
 
-### 2. Authentication
-- **OAuth 2.0 Authorization Code Flow with PKCE**: No client secret required, improving security for native/desktop apps.
-- **Scopes required**:
-  - `user-read-playback-state` - read current playback
-  - `user-modify-playback-state` - control playback (play, pause, skip, volume)
-  - `user-read-currently-playing` - get currently playing track
-  - `user-library-read` - access saved tracks (future)
-- **Token storage**: Access and refresh tokens stored in `~/.config/spotui/tokens.json` with `0600` permissions.
-- **Token refresh**: Automatic refresh when access token expires (1 hour lifetime).
+### `internal/app`
+- Owns application workflows such as search, device selection, playback commands, and search-result reference resolution.
+- Translates raw Spotify responses into app-facing types used by CLI and future TUI code.
+- Owns lightweight caching:
+  - last search is kept in memory and persisted in `config.json`
+  - playlist list is cached in memory for 60 seconds
+- Exposes playback-state data in a UI-friendly shape so the TUI can poll one service method instead of assembling state from multiple API calls.
 
-### 3. Security Considerations
-- No client secret in code (PKCE handles this)
-- Token file restricted to user-only read/write
-- Redirect to `http://localhost:8888/callback` during auth flow
-- State parameter for CSRF protection
+### `internal/ui`
+- Contains the Bubble Tea model and view code.
+- Renders the status bar, search-result list, and query input.
+- Polls playback state on an adaptive interval:
+  - faster while music is actively playing
+  - slower while paused
+  - slowest when no active device is available
 
-### 4. Error Handling
-- **403 Forbidden**: Premium required - display clear message
-- **404 Not Found**: No active device - prompt user to start Spotify
-- **401 Unauthorized**: Token expired - auto-refresh
-- **429 Rate Limited**: Exponential backoff
-- **Network errors**: Retry with timeout
+### `internal/spotify`
+- Thin Spotify Web API client.
+- Knows about HTTP paths, request/response payloads, and Spotify-specific error mapping.
+- Does not contain CLI formatting or config-persistence decisions.
 
-## Project Structure
+### `internal/auth`
+- Handles OAuth PKCE login, token persistence, and token refresh.
 
-```
-spotui/
-├── cmd/
-│   └── spotui/
-│       └── main.go              # Entry point, CLI argument parsing
-│
-├── internal/
-│   ├── auth/
-│   │   ├── oauth.go            # PKCE flow implementation
-│   │   ├── token.go            # Token persistence and refresh
-│   │   └── server.go           # Callback server for OAuth
-│   │
-│   ├── spotify/
-│   │   ├── client.go           # API client with auth handling
-│   │   ├── player.go           # Playback endpoints (play, pause, skip, volume)
-│   │   ├── devices.go          # List/select devices
-│   │   ├── tracks.go           # Track/album/artist info
-│   │   └── types.go            # API response structs
-│   │
-│   ├── config/
-│   │   ├── config.go           # Load/save app configuration
-│   │   └── paths.go            # XDG Base Directory paths
-│   │
-│   ├── app/
-│   │   └── service.go          # Business logic layer (future)
-│   │
-│   └── ui/
-│       └── tui.go              # Bubble Tea UI (Phase 2)
-│
-├── ARCHITECTURE.md
-├── PHASE1.md
-├── README.md
-├── go.mod
-└── go.sum
-```
+### `internal/config`
+- Loads and saves local configuration under `~/.config/spotui/`.
+- Stores stable user preferences and the persisted last-search cache.
 
-### Package Responsibilities
+## Why This Prevents Spaghetti
 
-#### `cmd/spotui`
-- Parse CLI flags
-- Initialize config and auth
-- Launch TUI or handle CLI commands
+Before Phase 2, `cmd/spotui` handled argument parsing, device matching, last-search persistence, search-index resolution, and direct Spotify client calls in one file. That works for a small CLI, but it becomes brittle as soon as a second UI exists.
 
-#### `internal/auth`
-- Generate PKCE code verifier and challenge
-- Start local HTTP server for callback
-- Exchange authorization code for tokens
-- Persist and refresh tokens
-- Provide valid access tokens to API client
+With the new boundary, both the CLI and a future Bubble Tea TUI can call the same `internal/app.PlayerService` methods. That keeps:
 
-#### `internal/spotify`
-- HTTP client with automatic token injection
-- Spotify Web API endpoints
-- Error parsing and wrapping
-- Rate limit handling
-- Device management
+- transport logic in `internal/spotify`
+- workflow and caching logic in `internal/app`
+- presentation logic in `cmd/spotui` or future `internal/ui`
 
-#### `internal/config`
-- Read/write `~/.config/spotui/config.toml`
-- XDG Base Directory spec compliance
-- Client ID, redirect URI, port configuration
-- Default values
+This matters because the TUI needs the same actions as the CLI plus polling and richer state. Reusing the service avoids duplicating device-selection rules, search caching, playback behavior, and reference-resolution logic across two front ends.
 
-#### `internal/app`
-- Coordinate between Spotify API and UI (Phase 2)
-- State management
-- Background updates (polling current playback)
+## Current Data Flow
 
-#### `internal/ui`
-- Bubble Tea components (Phase 2)
-- Key bindings
-- Display current track, playback controls
-- Device selector
+1. `cmd/spotui` loads config and starts either a CLI command or `internal/ui`.
+2. `internal/app` creates the auth manager and Spotify client, then executes the requested workflow.
+3. `internal/spotify` performs HTTP requests against the Spotify Web API.
+4. `internal/app` updates caches or persisted config when needed and returns app-facing types.
+5. `cmd/spotui` or `internal/ui` renders the result.
 
-## Configuration
+## Polling Strategy
 
-### Environment Variables (optional)
-```bash
-SPOTUI_CLIENT_ID=<spotify-app-client-id>
-SPOTUI_REDIRECT_URI=http://localhost:8888/callback
-SPOTUI_CALLBACK_PORT=8888
-```
+The TUI only polls playback state, and it adapts the interval based on the latest known state:
 
-### Configuration File: `~/.config/spotui/config.toml`
-```toml
-[auth]
-client_id = "your-spotify-client-id"
-redirect_uri = "http://localhost:8888/callback"
-callback_port = 8888
+- active playback: about every 1.5 seconds
+- paused playback: every 4 seconds
+- no active device: every 6 seconds
 
-[app]
-poll_interval_ms = 1000  # How often to refresh playback state
-default_device = ""      # Device ID to prefer (optional)
-```
-
-### Token File: `~/.config/spotui/tokens.json` (0600)
-```json
-{
-  "access_token": "BQD...",
-  "refresh_token": "AQD...",
-  "token_type": "Bearer",
-  "expires_at": "2026-03-03T10:30:00Z"
-}
-```
-
-### Required User Setup
-1. Create Spotify app at https://developer.spotify.com/dashboard
-2. Add redirect URI: `http://localhost:8888/callback`
-3. Copy client ID
-4. Run `spotui auth` to authenticate
-5. Ensure Spotify is running on a device (desktop, mobile, web)
-
-## Phase 1 Scope
-See [PHASE1.md](PHASE1.md) for detailed checklist.
-
-**Phase 1 delivers**:
-- OAuth PKCE authentication flow
-- Token persistence and refresh
-- Basic Spotify API client
-- Playback control functions (play/pause, skip, volume)
-- Device listing
-- CLI testing tool (not full TUI)
-
-**Phase 2 (future)**:
-- Bubble Tea TUI
-- Live playback display
-- Interactive controls
-- Search and library browsing
+That keeps the status bar responsive without hammering Spotify when there is nothing changing.

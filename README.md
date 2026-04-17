@@ -1,12 +1,12 @@
-# spotui Phase 1
+# spotui
 
-`spotui` is a CLI-only Spotify controller for Phase 1. It authenticates with Spotify using Authorization Code with PKCE, stores tokens locally, searches tracks and playlists, lists devices, selects a preferred device, and sends playback commands through the Spotify Web API.
+`spotui` is a Spotify controller with both a CLI and a minimal Bubble Tea TUI. It authenticates with Spotify using Authorization Code with PKCE, stores tokens locally, searches tracks and playlists, lists devices, selects a preferred device, and sends playback commands through the Spotify Web API.
 
 ## Build
 
 Requirements:
 
-- Go 1.22+
+- Go 1.24.2+
 - A Spotify Premium account for playback control commands
 - A Spotify app client ID from the Spotify developer dashboard
 
@@ -15,6 +15,14 @@ Build the CLI:
 ```bash
 go build -o spotui ./cmd/spotui
 ```
+
+Or with `Task`:
+
+```bash
+task build
+```
+
+The TUI is launched explicitly with `spotui tui`. This keeps existing CLI behavior unchanged for scripts and shell history instead of silently changing the default mode.
 
 ## Spotify App Setup
 
@@ -77,6 +85,12 @@ Search tracks and playlists:
 spotui search "daft punk"
 ```
 
+Launch the TUI:
+
+```bash
+spotui tui
+```
+
 For `spotui play`, the final argument can be one of:
 
 - a raw Spotify ID
@@ -124,6 +138,15 @@ spotui next
 spotui prev
 ```
 
+## TUI Keybindings
+
+- `Enter` in the input box: search for the current query
+- `Tab`: switch focus between the query input and results list
+- `Enter` on a selected result: play the selected track or playlist
+- `Up` / `Down`: move through search results when the list is focused
+- `q` or `Ctrl+C`: quit the TUI
+- `/pause`, `/resume`, `/next`, `/prev`: run basic playback actions from the input prompt
+
 ## Example Output
 
 `spotui devices`:
@@ -146,8 +169,16 @@ Playlists for "daft punk":
 
 In the examples above, `spotui play track 3` means "play the third track from the most recent search results", while `spotui play playlist 1` means "play the first playlist from the most recent search results".
 
+## Polling Notes
+
+- The TUI does not poll Spotify at a fixed aggressive rate.
+- When playback is active, it refreshes roughly every 1.5 seconds so the status bar stays current.
+- When playback is paused, polling backs off to every 4 seconds.
+- When no active device is available, polling backs off further to every 6 seconds.
+- Search requests only happen when you submit a query, and playlist caching from the Phase 2 service layer remains in place for 60 seconds.
+
 ## Notes
 
 - Playback commands require Spotify Premium. Spotify typically returns HTTP 403 otherwise.
 - If no active or preferred device exists, playback commands fail with a clear error instead of guessing.
-- Phase 1 does not poll for current playback state.
+- The TUI status bar shows the current device, playback state, track, artist, and a small progress indicator when Spotify reports duration data.

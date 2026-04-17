@@ -1,0 +1,37 @@
+version: "3"
+
+vars:
+  BINARY: spotui
+
+tasks:
+  default:
+    desc: Build the spotui binary
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the spotui binary
+    cmds:
+      - go build -o {{.BINARY}} ./cmd/spotui
+
+  run:
+    desc: Run the CLI entrypoint
+    deps: [build]
+    cmds:
+      - ./{{.BINARY}}
+
+  tui:
+    desc: Launch the Bubble Tea TUI
+    deps: [build]
+    cmds:
+      - ./{{.BINARY}} tui
+
+  fmt:
+    desc: Format Go source files
+    cmds:
+      - gofmt -w ./cmd ./internal
+
+  check:
+    desc: Verify the project builds
+    cmds:
+      - go build ./...

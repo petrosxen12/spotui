@@ -1,7 +1,5 @@
 package spotify
 
-import "github.com/petrosxen/spotui/internal/config"
-
 type User struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
@@ -14,7 +12,18 @@ type Device struct {
 	IsActive bool   `json:"is_active"`
 }
 
+type Artist struct {
+	Name string `json:"name"`
+}
+
+type SearchItem struct {
+	ID       string
+	Name     string
+	URI      string
+	Subtitle string
+}
+
 type SearchResults struct {
-	Tracks    []config.SearchItem
-	Playlists []config.SearchItem
+	Tracks    []SearchItem
+	Playlists []SearchItem
 }
