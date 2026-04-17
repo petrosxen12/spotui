@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -13,156 +12,304 @@ import (
 	"github.com/petrosxen/spotui/internal/auth"
 	"github.com/petrosxen/spotui/internal/config"
 	spotifyapi "github.com/petrosxen/spotui/internal/spotify"
+	"github.com/spf13/cobra"
 )
 
 func main() {
-	ctx := context.Background()
-	if err := run(ctx, os.Args[1:]); err != nil {
+	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "spotui: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		printUsage()
-		return nil
+func newRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:           "spotui",
+		Short:         "CLI Spotify controller for Phase 1",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
+	rootCmd.AddCommand(newLoginCmd())
+	rootCmd.AddCommand(newMeCmd())
+	rootCmd.AddCommand(newDevicesCmd())
+	rootCmd.AddCommand(newUseCmd())
+	rootCmd.AddCommand(newSearchCmd())
+	rootCmd.AddCommand(newPlayCmd())
+	rootCmd.AddCommand(newPauseCmd())
+	rootCmd.AddCommand(newResumeCmd())
+	rootCmd.AddCommand(newNextCmd())
+	rootCmd.AddCommand(newPrevCmd())
 
-	switch args[0] {
-	case "login":
-		return runLogin(ctx, cfg, args[1:])
-	case "me":
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			me, err := client.Me(ctx)
+	return rootCmd
+}
+
+func newLoginCmd() *cobra.Command {
+	var clientID string
+	var redirectURI string
+
+	cmd := &cobra.Command{
+		Use:   "login",
+		Short: "Authenticate with Spotify using Authorization Code with PKCE",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
 			if err != nil {
 				return err
 			}
-			if me.DisplayName != "" {
-				fmt.Printf("%s (%s)\n", me.ID, me.DisplayName)
-			} else {
-				fmt.Printf("%s\n", me.ID)
+			if clientID == "" {
+				clientID = cfg.ClientID
 			}
+			if redirectURI == "" {
+				redirectURI = cfg.RedirectURI
+			}
+			if clientID == "" {
+				return errors.New("missing Spotify client ID; set SPOTUI_CLIENT_ID, config.json, or pass --client-id")
+			}
+			if redirectURI == "" {
+				redirectURI = config.DefaultRedirectURI
+			}
+
+			cfg.ClientID = clientID
+			cfg.RedirectURI = redirectURI
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+
+			manager, err := auth.NewManager(cfg)
+			if err != nil {
+				return err
+			}
+			token, err := manager.Login(cmd.Context())
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Login complete. Access token expires at %s.\n", token.ExpiresAt.Format(time.RFC3339))
 			return nil
-		})
-	case "devices":
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			devices, err := client.Devices(ctx)
+		},
+	}
+
+	cmd.Flags().StringVar(&clientID, "client-id", "", "Spotify app client ID")
+	cmd.Flags().StringVar(&redirectURI, "redirect-uri", "", "OAuth redirect URI")
+	return cmd
+}
+
+func newMeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "me",
+		Short: "Print the current Spotify user",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
 			if err != nil {
 				return err
 			}
-			if len(devices) == 0 {
-				fmt.Println("No devices available.")
-				return nil
-			}
-			for _, device := range devices {
-				active := "inactive"
-				if device.IsActive {
-					active = "active"
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				me, err := client.Me(cmd.Context())
+				if err != nil {
+					return err
 				}
-				fmt.Printf("%s\t%s\t%s\t%s\n", device.ID, device.Name, device.Type, active)
-			}
-			return nil
-		})
-	case "use":
-		if len(args) < 2 {
-			return errors.New("usage: spotui use <substring>")
-		}
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			return runUse(ctx, cfg, client, strings.Join(args[1:], " "))
-		})
-	case "search":
-		if len(args) < 2 {
-			return errors.New("usage: spotui search <query>")
-		}
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			return runSearch(ctx, cfg, client, strings.Join(args[1:], " "))
-		})
-	case "play":
-		if len(args) != 3 {
-			return errors.New("usage: spotui play track|playlist <spotify-id|spotify-uri|last-search-index>")
-		}
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			return runPlay(ctx, cfg, client, args[1], args[2])
-		})
-	case "pause":
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			deviceID, err := client.ResolvePlaybackDevice(ctx, cfg.PreferredDeviceID)
-			if err != nil {
-				return err
-			}
-			return client.Pause(ctx, deviceID)
-		})
-	case "resume":
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			deviceID, err := client.ResolvePlaybackDevice(ctx, cfg.PreferredDeviceID)
-			if err != nil {
-				return err
-			}
-			return client.Resume(ctx, deviceID)
-		})
-	case "next":
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			deviceID, err := client.ResolvePlaybackDevice(ctx, cfg.PreferredDeviceID)
-			if err != nil {
-				return err
-			}
-			return client.Next(ctx, deviceID)
-		})
-	case "prev":
-		return withClient(ctx, cfg, func(client *spotifyapi.Client) error {
-			deviceID, err := client.ResolvePlaybackDevice(ctx, cfg.PreferredDeviceID)
-			if err != nil {
-				return err
-			}
-			return client.Previous(ctx, deviceID)
-		})
-	case "help", "-h", "--help":
-		printUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown command %q", args[0])
+				if me.DisplayName != "" {
+					fmt.Printf("%s (%s)\n", me.ID, me.DisplayName)
+				} else {
+					fmt.Printf("%s\n", me.ID)
+				}
+				return nil
+			})
+		},
 	}
 }
 
-func runLogin(ctx context.Context, cfg *config.Config, args []string) error {
-	fs := flag.NewFlagSet("login", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
+func newDevicesCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "devices",
+		Short: "List available Spotify playback devices",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				devices, err := client.Devices(cmd.Context())
+				if err != nil {
+					return err
+				}
+				if len(devices) == 0 {
+					fmt.Println("No devices available.")
+					return nil
+				}
+				for _, device := range devices {
+					active := "inactive"
+					if device.IsActive {
+						active = "active"
+					}
+					fmt.Printf("%s\t%s\t%s\t%s\n", device.ID, device.Name, device.Type, active)
+				}
+				return nil
+			})
+		},
+	}
+}
 
-	clientID := fs.String("client-id", cfg.ClientID, "Spotify app client ID")
-	redirectURI := fs.String("redirect-uri", cfg.RedirectURI, "OAuth redirect URI")
+func newUseCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "use <substring>",
+		Short: "Set the preferred playback device by substring match",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				return runUse(cmd.Context(), cfg, client, strings.Join(args, " "))
+			})
+		},
+	}
+}
 
-	if err := fs.Parse(args); err != nil {
-		return err
+func newSearchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "search <query>",
+		Short: "Search for tracks and playlists",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				return runSearch(cmd.Context(), cfg, client, strings.Join(args, " "))
+			})
+		},
 	}
-	if *clientID == "" {
-		return errors.New("missing Spotify client ID; set SPOTUI_CLIENT_ID, config.json, or pass --client-id")
-	}
-	if *redirectURI == "" {
-		*redirectURI = config.DefaultRedirectURI
+}
+
+func newPlayCmd() *cobra.Command {
+	playCmd := &cobra.Command{
+		Use:   "play",
+		Short: "Start playback on the selected device",
 	}
 
-	cfg.ClientID = *clientID
-	cfg.RedirectURI = *redirectURI
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
+	playCmd.AddCommand(&cobra.Command{
+		Use:   "track <spotify-track-id|spotify-track-uri|last-search-track-index>",
+		Short: "Play a track",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				return runPlay(cmd.Context(), cfg, client, "track", args[0])
+			})
+		},
+	})
 
-	manager, err := auth.NewManager(cfg)
-	if err != nil {
-		return err
+	playCmd.AddCommand(&cobra.Command{
+		Use:   "playlist <spotify-playlist-id|spotify-playlist-uri|last-search-playlist-index>",
+		Short: "Play a playlist",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				return runPlay(cmd.Context(), cfg, client, "playlist", args[0])
+			})
+		},
+	})
+
+	return playCmd
+}
+
+func newPauseCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "pause",
+		Short: "Pause playback",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				deviceID, err := client.ResolvePlaybackDevice(cmd.Context(), cfg.PreferredDeviceID)
+				if err != nil {
+					return err
+				}
+				return client.Pause(cmd.Context(), deviceID)
+			})
+		},
 	}
-	token, err := manager.Login(ctx)
-	if err != nil {
-		return err
+}
+
+func newResumeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "resume",
+		Short: "Resume playback",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				deviceID, err := client.ResolvePlaybackDevice(cmd.Context(), cfg.PreferredDeviceID)
+				if err != nil {
+					return err
+				}
+				return client.Resume(cmd.Context(), deviceID)
+			})
+		},
 	}
-	fmt.Printf("Login complete. Access token expires at %s.\n", token.ExpiresAt.Format(time.RFC3339))
-	return nil
+}
+
+func newNextCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "next",
+		Short: "Skip to the next item",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				deviceID, err := client.ResolvePlaybackDevice(cmd.Context(), cfg.PreferredDeviceID)
+				if err != nil {
+					return err
+				}
+				return client.Next(cmd.Context(), deviceID)
+			})
+		},
+	}
+}
+
+func newPrevCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "prev",
+		Short: "Return to the previous item",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withClient(cmd.Context(), cfg, func(client *spotifyapi.Client) error {
+				deviceID, err := client.ResolvePlaybackDevice(cmd.Context(), cfg.PreferredDeviceID)
+				if err != nil {
+					return err
+				}
+				return client.Previous(cmd.Context(), deviceID)
+			})
+		},
+	}
 }
 
 func runUse(ctx context.Context, cfg *config.Config, client *spotifyapi.Client, needle string) error {
@@ -292,19 +439,4 @@ func withClient(ctx context.Context, cfg *config.Config, fn func(client *spotify
 	}
 	client := spotifyapi.NewClient(cfg, manager)
 	return fn(client)
-}
-
-func printUsage() {
-	fmt.Println(`spotui commands:
-  spotui login [--client-id <id>] [--redirect-uri <uri>]
-  spotui me
-  spotui devices
-  spotui use <substring>
-  spotui search "<query>"
-  spotui play track <spotify-track-id|spotify-track-uri|last-search-track-index>
-  spotui play playlist <spotify-playlist-id|spotify-playlist-uri|last-search-playlist-index>
-  spotui next
-  spotui prev
-  spotui pause
-  spotui resume`)
 }
