@@ -167,7 +167,7 @@ func (s *Service) GetPlaybackState(ctx context.Context) (PlaybackState, error) {
 	if err != nil {
 		return PlaybackState{}, err
 	}
-	return PlaybackState{
+	playback := PlaybackState{
 		Device: Device{
 			ID:       state.Device.ID,
 			Name:     state.Device.Name,
@@ -183,7 +183,15 @@ func (s *Service) GetPlaybackState(ctx context.Context) (PlaybackState, error) {
 		ItemURI:          state.Item.URI,
 		ContextURI:       state.Context.URI,
 		CurrentlyPlaying: state.CurrentlyPlayingType,
-	}, nil
+	}
+
+	queue, err := s.client.GetQueue(ctx)
+	if err == nil && len(queue.Queue) > 0 {
+		playback.NextItemName = queue.Queue[0].Name
+		playback.NextArtistName = strings.Join(artistNames(queue.Queue[0].Artists), ", ")
+	}
+
+	return playback, nil
 }
 
 func (s *Service) ListDevices(ctx context.Context) ([]Device, error) {

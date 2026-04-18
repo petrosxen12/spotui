@@ -8,6 +8,8 @@ import (
 )
 
 var (
+	spotifyGreen = lipgloss.Color("#1DB954")
+
 	pageStyle = lipgloss.NewStyle().
 			Padding(0, 1)
 
@@ -29,35 +31,37 @@ var (
 	dockFocusedStyle = dockStyle.Copy().
 				BorderTop(true).
 				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#888888"})
+				BorderForeground(lipgloss.AdaptiveColor{Light: "#5E8F72", Dark: "#2A7E4F"})
 
 	eyebrowStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#A0A0A0"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "#66706B", Dark: "#8A948F"}).
 			Bold(true)
 
 	kickerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#A0A0A0"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#6E7772", Dark: "#737C78"})
 
 	titleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#111513", Dark: "#F3F6F4"}).
 			Bold(true)
 
 	subtitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#555555", Dark: "#B8B8B8"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#505854", Dark: "#C7CECA"})
 
 	metaPillStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#A0A0A0"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#7A847F", Dark: "#8B938F"}).
+			Bold(true)
 
 	infoStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#555555", Dark: "#B8B8B8"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#59615D", Dark: "#BAC1BD"})
 
 	successStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#444444", Dark: "#D0D0D0"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#355B45", Dark: "#8FD0A7"})
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#8A3B2E", Dark: "#FF8A7A"})
 
 	commandHintStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#9A9A9A"})
+				Foreground(lipgloss.AdaptiveColor{Light: "#707874", Dark: "#838A87"})
 
 	inputShellStyle = lipgloss.NewStyle().
 			Padding(0, 0)
@@ -67,30 +71,32 @@ var (
 				MarginBottom(1).
 				BorderLeft(true).
 				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#888888"})
+				BorderForeground(lipgloss.AdaptiveColor{Light: "#5E8F72", Dark: "#2A7E4F"})
 
 	suggestionSelectedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#111513", Dark: "#F3F6F4"}).
 				Bold(true)
 
 	selectedRowStyle = lipgloss.NewStyle().
-				Padding(0, 0)
+			Padding(0, 0)
 
 	selectedTitleStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#111513", Dark: "#F4F7F5"}).
 				Bold(true)
 
 	selectedDescStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#555555", Dark: "#B8B8B8"})
+				Foreground(lipgloss.AdaptiveColor{Light: "#59615D", Dark: "#C7CECA"})
 
 	rowTitleStyle = lipgloss.NewStyle().
-			UnsetForeground()
+			Foreground(lipgloss.AdaptiveColor{Light: "#18201D", Dark: "#E7ECE9"})
 
 	rowDescStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#9A9A9A"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#6A726E", Dark: "#7F8884"})
 
 	contextRailStyle = lipgloss.NewStyle().
 				BorderLeft(true).
 				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#888888"}).
+				BorderForeground(lipgloss.AdaptiveColor{Light: "#58605C", Dark: "#626A66"}).
 				PaddingLeft(1)
 )
 
@@ -176,10 +182,22 @@ func (m model) playbarView(layout layoutMetrics) string {
 		lipgloss.Left,
 		eyebrowStyle.Render("spotui"),
 		"  ",
-		m.playingStatusStyle().Render(strings.ToLower(status)),
+		m.playingStatusStyle().Render("● "+strings.ToLower(status)),
 	)
-	progressGroup := kickerStyle.Render(progress + "  " + timing)
+	progressGroup := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		kickerStyle.Render(progress),
+		"  ",
+		infoStyle.Render(timing),
+	)
 	if layout.playbarCompact {
+		secondary := artist + "  ·  " + device
+		if m.playback.NextItemName != "" {
+			nextFragment := "  ·  next " + m.playback.NextItemName
+			if available := layout.bodyWidth - lipgloss.Width(secondary); available > 8 {
+				secondary += truncateText(nextFragment, available)
+			}
+		}
 		left := lipgloss.JoinHorizontal(
 			lipgloss.Left,
 			leftPrefix,
@@ -188,8 +206,8 @@ func (m model) playbarView(layout layoutMetrics) string {
 		)
 		return strings.Join([]string{
 			left,
-			subtitleStyle.Render(artist),
-			kickerStyle.Render(progress + "  " + timing),
+			subtitleStyle.Render(secondary),
+			progressGroup,
 		}, "\n")
 	}
 
@@ -278,7 +296,12 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 	}
 
 	lines := []string{eyebrowStyle.Render(header)}
-	lines = append(lines, kickerStyle.Render(countLabel+"  "+m.listProgressText()))
+	progressText := strings.TrimSpace(m.listProgressText())
+	if progressText != "" {
+		lines = append(lines, kickerStyle.Render(countLabel+"  ·  "+progressText))
+	} else {
+		lines = append(lines, kickerStyle.Render(countLabel))
+	}
 	lines = append(lines, "", body)
 	return style.Width(width).Render(strings.Join(lines, "\n"))
 }
@@ -296,7 +319,7 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 		statusTone.Render(m.lastAction),
 	}
 	if !layout.widthCompact {
-		lines = append(lines, commandHintStyle.Render("tab focus  ·  enter select  ·  / commands  ·  q quit"))
+		lines = append(lines, commandHintStyle.Render("tab focus  ·  enter play  ·  / commands  ·  q quit"))
 	}
 	return panelStyle.Width(width).Render(strings.Join(lines, "\n"))
 }
@@ -339,6 +362,15 @@ func (m model) contextRailView(layout layoutMetrics) string {
 		lines = append(lines, infoStyle.Render(truncateText(m.playback.Device.Name, layout.railWidth)))
 	}
 
+	if m.playback.NextItemName != "" {
+		lines = append(lines, "")
+		lines = append(lines, subtitleStyle.Render("Next"))
+		lines = append(lines, titleStyle.Render(truncateText(m.playback.NextItemName, layout.railWidth)))
+		if m.playback.NextArtistName != "" {
+			lines = append(lines, infoStyle.Render(truncateText(m.playback.NextArtistName, layout.railWidth)))
+		}
+	}
+
 	if depth := len(m.viewHistory); depth > 0 {
 		lines = append(lines, "")
 		lines = append(lines, subtitleStyle.Render("Back"))
@@ -370,12 +402,12 @@ func (m model) suggestionsView(layout layoutMetrics) string {
 	for i, suggestion := range visible {
 		line := suggestion.value
 		if suggestion.description != "" {
-			line += "  " + suggestion.description
+			line += "  " + commandHintStyle.Render(suggestion.description)
 		}
 		if i == m.suggestionIndex {
-			lines = append(lines, suggestionSelectedStyle.Render(line))
+			lines = append(lines, suggestionSelectedStyle.Render("› ")+line)
 		} else {
-			lines = append(lines, commandHintStyle.Render(line))
+			lines = append(lines, commandHintStyle.Render("  "+line))
 		}
 	}
 	return suggestionPopupStyle.Width(maxInt(20, layout.bodyWidth-4)).Render(strings.Join(lines, "\n"))
@@ -408,8 +440,11 @@ func (m model) selectedContextLines(width int) []string {
 }
 
 func (m model) playingStatusStyle() lipgloss.Style {
-	if m.playback.IsPlaying && m.accentColor != "" {
-		return metaPillStyle.Copy().Foreground(lipgloss.Color(m.accentColor)).Bold(true)
+	if m.playback.IsPlaying {
+		if m.accentColor != "" {
+			return metaPillStyle.Copy().Foreground(lipgloss.Color(m.accentColor)).Bold(true)
+		}
+		return metaPillStyle.Copy().Foreground(spotifyGreen).Bold(true)
 	}
 	return metaPillStyle
 }

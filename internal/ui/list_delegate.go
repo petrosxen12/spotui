@@ -63,22 +63,24 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, selected bool) string {
 	prefix := "  "
 	titleStyleToUse := rowTitleStyle
+	metaStyleToUse := metaPillStyle
 	if selected {
-		prefix = "> "
+		prefix = "› "
 		titleStyleToUse = selectedTitleStyle
+		metaStyleToUse = selectedDescStyle.Copy().Bold(true)
 	}
 
 	if !d.wideLayout || d.contentWidth() < 36 {
 		left := lipgloss.JoinHorizontal(
 			lipgloss.Left,
-			metaPillStyle.Render("["+metaText+"]"),
+			metaStyleToUse.Render(metaText),
 			" ",
 			titleStyleToUse.Render(titleText),
 		)
 		return prefix + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(left)
 	}
 
-	meta := metaPillStyle.Render(metaText)
+	meta := metaStyleToUse.Render(metaText)
 	leftWidth := maxInt(1, d.contentWidth()-lipgloss.Width(meta)-2)
 	left := lipgloss.NewStyle().MaxWidth(leftWidth).Render(titleStyleToUse.Render(titleText))
 	gap := d.contentWidth() - lipgloss.Width(left) - lipgloss.Width(meta)

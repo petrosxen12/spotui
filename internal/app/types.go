@@ -44,4 +44,6 @@ type PlaybackState struct {
 	ItemURI          string
 	ContextURI       string
 	CurrentlyPlaying string
+	NextItemName     string
+	NextArtistName   string
 }
