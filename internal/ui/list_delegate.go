@@ -1,0 +1,171 @@
+package ui
+
+import (
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/petrosxen/spotui/internal/app"
+)
+
+type resultDelegate struct {
+	width      int
+	wideLayout bool
+}
+
+func (d resultDelegate) Height() int  { return 2 }
+func (d resultDelegate) Spacing() int { return 1 }
+
+func (d resultDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
+	return nil
+}
+
+func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	var titleText string
+	var descText string
+	var metaText string
+
+	switch entry := item.(type) {
+	case resultItem:
+		titleText = entry.title
+		descText = entry.description
+		metaText = strings.ToUpper(entry.kind)
+	case deviceItem:
+		titleText = entry.title
+		descText = entry.description
+		metaText = "DEVICE"
+	case infoItem:
+		titleText = entry.title
+		descText = entry.description
+		metaText = "HELP"
+	default:
+		return
+	}
+
+	line1 := d.renderPrimaryLine(titleText, metaText, index == m.Index())
+	line2 := "  " + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(rowDescStyle.Render(descText))
+
+	if index == m.Index() {
+		block := strings.Join([]string{
+			selectedTitleStyle.Render(line1),
+			selectedDescStyle.Render(line2),
+		}, "\n")
+		fmt.Fprint(w, selectedRowStyle.Render(block))
+		return
+	}
+
+	fmt.Fprint(w, strings.Join([]string{line1, line2}, "\n"))
+}
+
+func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, selected bool) string {
+	prefix := "  "
+	titleStyleToUse := rowTitleStyle
+	if selected {
+		prefix = "> "
+		titleStyleToUse = selectedTitleStyle
+	}
+
+	if !d.wideLayout || d.contentWidth() < 36 {
+		left := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			metaPillStyle.Render("["+metaText+"]"),
+			" ",
+			titleStyleToUse.Render(titleText),
+		)
+		return prefix + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(left)
+	}
+
+	meta := metaPillStyle.Render(metaText)
+	leftWidth := maxInt(1, d.contentWidth()-lipgloss.Width(meta)-2)
+	left := lipgloss.NewStyle().MaxWidth(leftWidth).Render(titleStyleToUse.Render(titleText))
+	gap := d.contentWidth() - lipgloss.Width(left) - lipgloss.Width(meta)
+	if gap < 2 {
+		gap = 2
+	}
+	return prefix + left + strings.Repeat(" ", gap) + meta
+}
+
+func (d resultDelegate) contentWidth() int {
+	if d.width <= 0 {
+		return 40
+	}
+	return maxInt(1, d.width-2)
+}
+
+type resultItem struct {
+	title       string
+	description string
+	kind        string
+	uri         string
+}
+
+func (i resultItem) Title() string       { return i.title }
+func (i resultItem) Description() string { return i.description }
+func (i resultItem) FilterValue() string { return i.title + " " + i.description + " " + i.kind }
+
+type deviceItem struct {
+	title       string
+	description string
+	id          string
+}
+
+func (i deviceItem) Title() string       { return i.title }
+func (i deviceItem) Description() string { return i.description }
+func (i deviceItem) FilterValue() string { return i.title + " " + i.description + " " + i.id }
+
+type infoItem struct {
+	title       string
+	description string
+}
+
+func (i infoItem) Title() string       { return i.title }
+func (i infoItem) Description() string { return i.description }
+func (i infoItem) FilterValue() string { return i.title + " " + i.description }
+
+func itemsFromResults(results app.Results) []list.Item {
+	items := make([]list.Item, 0, len(results.Tracks)+len(results.Playlists))
+	for _, track := range results.Tracks {
+		description := "track"
+		if track.Subtitle != "" {
+			description = track.Subtitle
+		}
+		items = append(items, resultItem{
+			title:       track.Name,
+			description: description,
+			kind:        "track",
+			uri:         track.URI,
+		})
+	}
+	for _, playlist := range results.Playlists {
+		description := "playlist"
+		if playlist.Subtitle != "" {
+			description = "playlist by " + playlist.Subtitle
+		}
+		items = append(items, resultItem{
+			title:       playlist.Name,
+			description: description,
+			kind:        "playlist",
+			uri:         playlist.URI,
+		})
+	}
+	return items
+}
+
+func itemsFromDevices(devices []app.Device) []list.Item {
+	items := make([]list.Item, 0, len(devices))
+	for _, device := range devices {
+		state := device.Type
+		if device.IsActive {
+			state += " • active"
+		}
+		items = append(items, deviceItem{
+			title:       device.Name,
+			description: state,
+			id:          device.ID,
+		})
+	}
+	return items
+}
