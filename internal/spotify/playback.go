@@ -18,6 +18,9 @@ type PlaybackState struct {
 		URI        string   `json:"uri"`
 		DurationMS int64    `json:"duration_ms"`
 		Artists    []Artist `json:"artists"`
+		Album      struct {
+			Images []Image `json:"images"`
+		} `json:"album"`
 	} `json:"item"`
 }
 

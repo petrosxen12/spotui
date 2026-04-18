@@ -179,6 +179,7 @@ func (s *Service) GetPlaybackState(ctx context.Context) (PlaybackState, error) {
 		Duration:         time.Duration(state.Item.DurationMS) * time.Millisecond,
 		ItemName:         state.Item.Name,
 		ArtistName:       strings.Join(artistNames(state.Item.Artists), ", "),
+		AlbumArtURL:      firstImageURL(state.Item.Album.Images),
 		ItemURI:          state.Item.URI,
 		ContextURI:       state.Context.URI,
 		CurrentlyPlaying: state.CurrentlyPlayingType,
@@ -390,4 +391,13 @@ func artistNames(artists []spotifyapi.Artist) []string {
 		}
 	}
 	return names
+}
+
+func firstImageURL(images []spotifyapi.Image) string {
+	for _, image := range images {
+		if image.URL != "" {
+			return image.URL
+		}
+	}
+	return ""
 }

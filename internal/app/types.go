@@ -40,6 +40,7 @@ type PlaybackState struct {
 	Duration         time.Duration
 	ItemName         string
 	ArtistName       string
+	AlbumArtURL      string
 	ItemURI          string
 	ContextURI       string
 	CurrentlyPlaying string

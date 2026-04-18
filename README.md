@@ -141,11 +141,35 @@ spotui prev
 ## TUI Keybindings
 
 - `Enter` in the input box: search for the current query
-- `Tab`: switch focus between the query input and results list
+- `Tab`: cycle slash-command suggestions when the popup is open, otherwise switch focus between the query input and results list
 - `Enter` on a selected result: play the selected track or playlist
+- `Enter` on a selected device: set that device as the preferred playback device
 - `Up` / `Down`: move through search results when the list is focused
+- `Right` or `Ctrl+Space`: accept the current autocomplete suggestion
+- `Esc`: dismiss the autocomplete popup
 - `q` or `Ctrl+C`: quit the TUI
-- `/pause`, `/resume`, `/next`, `/prev`: run basic playback actions from the input prompt
+
+## TUI Slash Commands
+
+- `/help`: show command help in the list area
+- `/next`: skip to the next item
+- `/prev`: return to the previous item
+- `/pause`: pause playback
+- `/resume`: resume playback
+- `/devices`: show Spotify devices in the list area
+- `/device <name>`: select a device by name substring
+- `/play <query|index>`: play from the last search results by fuzzy name match or 1-based index
+- `/quit`: quit the TUI
+
+## TUI Autocomplete
+
+- When the input starts with `/` and you are typing a command name, the prompt shows matching slash commands in a small popup above the input.
+- `Tab` cycles the popup suggestions.
+- `Right` or `Ctrl+Space` accepts the highlighted suggestion into the prompt.
+- `Enter` executes an exact slash command, or accepts the highlighted command suggestion first if the command name is still incomplete.
+- After `/device `, autocomplete suggests available Spotify device names.
+- After `/play `, autocomplete suggests tracks and playlists from the most recent TUI search results.
+- `Esc` closes the popup without clearing the prompt.
 
 ## Example Output
 

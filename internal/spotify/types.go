@@ -16,6 +16,10 @@ type Artist struct {
 	Name string `json:"name"`
 }
 
+type Image struct {
+	URL string `json:"url"`
+}
+
 type SearchItem struct {
 	ID       string
 	Name     string
