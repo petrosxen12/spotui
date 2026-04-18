@@ -40,6 +40,9 @@ type model struct {
 	suggestionsOpen  bool
 	accentColor      string
 	accentColorCache map[string]string
+	deviceCache      []app.Device
+	deviceCacheReady bool
+	deviceCacheBusy  bool
 	viewHistory      []viewState
 }
 
@@ -78,6 +81,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.toggleFocus()
+			if m.inputFocused {
+				return m, m.refreshSuggestions()
+			}
 			return m, nil
 		}
 
@@ -104,8 +110,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
-			m.refreshSuggestions()
-			return m, cmd
+			refreshCmd := m.refreshSuggestions()
+			return m, tea.Batch(cmd, refreshCmd)
 		}
 
 		switch msg.String() {
@@ -129,8 +135,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/":
 			m.toggleFocus()
 			m.input.SetValue("/")
-			m.refreshSuggestions()
-			return m, nil
+			return m, m.refreshSuggestions()
 		}
 
 		var cmd tea.Cmd
@@ -164,11 +169,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastActionErr = false
 		return m, nil
 	case devicesMsg:
+		m.deviceCacheBusy = false
 		if msg.err != nil {
 			m.lastAction = msg.err.Error()
 			m.lastActionErr = true
 			return m, nil
 		}
+		m.storeDeviceCache(msg.devices)
 		if msg.pushHistory {
 			m.pushViewState()
 		}
@@ -188,6 +195,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastAction = fmt.Sprintf("Selected device: %s", msg.device.Name)
 		m.lastActionErr = false
 		return m, fetchDevicesCmd(m.service, false)
+	case deviceCacheMsg:
+		m.deviceCacheBusy = false
+		if msg.err != nil {
+			return m, nil
+		}
+		m.storeDeviceCache(msg.devices)
+		if !m.inputFocused {
+			return m, nil
+		}
+		return m, m.refreshSuggestions()
 	case helpMsg:
 		m.pushViewState()
 		m.listMode = listModeHelp
@@ -254,7 +271,6 @@ func (m *model) toggleFocus() {
 	m.inputFocused = !m.inputFocused
 	if m.inputFocused {
 		m.input.Focus()
-		m.refreshSuggestions()
 		return
 	}
 	m.input.Blur()
@@ -278,6 +294,11 @@ func (m *model) submitInput() tea.Cmd {
 		return m.runSlashCommand(value)
 	}
 	return searchCmd(m.service, value)
+}
+
+func (m *model) storeDeviceCache(devices []app.Device) {
+	m.deviceCache = append(m.deviceCache[:0], devices...)
+	m.deviceCacheReady = true
 }
 
 func (m *model) pushViewState() {

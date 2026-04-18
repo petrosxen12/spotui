@@ -16,7 +16,9 @@ type layoutMetrics struct {
 	compact             bool
 	widthCompact        bool
 	heightCompact       bool
+	heightMode          layoutHeightMode
 	playbarCompact      bool
+	playbarMinimal      bool
 	playbarProgressLen  int
 	listHeight          int
 	resultsChromeHeight int
@@ -25,7 +27,18 @@ type layoutMetrics struct {
 	pagePaddingY        int
 	railEnabled         bool
 	railWidth           int
+	footerVisible       bool
+	footerShowStatus    bool
+	footerShowHints     bool
 }
+
+type layoutHeightMode string
+
+const (
+	heightModeNormal  layoutHeightMode = "normal"
+	heightModeCompact layoutHeightMode = "compact"
+	heightModeMinimal layoutHeightMode = "minimal"
+)
 
 func (m *model) resize() {
 	if m.width <= 0 || m.height <= 0 {
@@ -50,7 +63,8 @@ func (m model) layoutMetrics() layoutMetrics {
 	if m.width < 70 {
 		paddingX = 0
 	}
-	if m.height < 23 {
+	heightMode := classifyHeightMode(m.height)
+	if heightMode != heightModeNormal {
 		paddingY = 0
 	}
 
@@ -62,7 +76,7 @@ func (m model) layoutMetrics() layoutMetrics {
 	mainWidth := bodyWidth
 	railEnabled := false
 	railWidth := 0
-	if bodyWidth >= 118 {
+	if bodyWidth >= 118 && heightMode == heightModeNormal {
 		candidateRailWidth := clampInt(bodyWidth/5, 22, 28)
 		candidateMainWidth := bodyWidth - candidateRailWidth - 3
 		if candidateMainWidth >= 72 {
@@ -73,13 +87,26 @@ func (m model) layoutMetrics() layoutMetrics {
 	}
 
 	widthCompact := mainWidth < 72
-	compact := widthCompact || m.height < 26
-	heightCompact := m.height < 23
-	playbarCompact := mainWidth < 72
+	heightCompact := heightMode != heightModeNormal
+	compact := widthCompact || heightCompact
+	playbarCompact := widthCompact || heightCompact
+	playbarMinimal := heightMode == heightModeMinimal
 
 	playbarProgressLen := clampInt(mainWidth/4, 12, 32)
+	if playbarMinimal {
+		playbarProgressLen = clampInt(mainWidth/5, 8, 18)
+	}
 	inputWidth := maxInt(10, bodyWidth-2)
 	resultsChromeHeight := 3
+	if heightMode == heightModeMinimal {
+		resultsChromeHeight = 2
+	}
+	footerVisible := true
+	footerShowStatus := true
+	footerShowHints := !widthCompact && heightMode == heightModeNormal
+	if heightMode == heightModeMinimal {
+		footerShowStatus = false
+	}
 
 	tempLayout := layoutMetrics{
 		bodyWidth:           bodyWidth,
@@ -87,7 +114,9 @@ func (m model) layoutMetrics() layoutMetrics {
 		compact:             compact,
 		widthCompact:        widthCompact,
 		heightCompact:       heightCompact,
+		heightMode:          heightMode,
 		playbarCompact:      playbarCompact,
+		playbarMinimal:      playbarMinimal,
 		playbarProgressLen:  playbarProgressLen,
 		inputWidth:          inputWidth,
 		pagePaddingX:        paddingX,
@@ -95,13 +124,25 @@ func (m model) layoutMetrics() layoutMetrics {
 		resultsChromeHeight: resultsChromeHeight,
 		railEnabled:         railEnabled,
 		railWidth:           railWidth,
+		footerVisible:       footerVisible,
+		footerShowStatus:    footerShowStatus,
+		footerShowHints:     footerShowHints,
 	}
 
 	pageVertical := paddingY * 2
 	playbarHeight := lipgloss.Height(m.playbarContainerStyle(tempLayout).Width(bodyWidth).Render(m.playbarView(tempLayout)))
-	footerHeight := lipgloss.Height(m.footerPanel(bodyWidth, tempLayout))
+	footerHeight := 0
+	if footerVisible {
+		footerHeight = lipgloss.Height(m.footerPanel(mainWidth, tempLayout))
+	}
 	dockHeight := lipgloss.Height(m.dockContainerStyle(tempLayout).Width(bodyWidth).Render(m.commandDockView(tempLayout)))
-	sectionGaps := 3
+	sectionGaps := 1
+	if footerVisible {
+		sectionGaps++
+	}
+	if dockHeight > 0 {
+		sectionGaps++
+	}
 	available := m.height - pageVertical - playbarHeight - footerHeight - dockHeight - sectionGaps
 	minListHeight := 1
 	if m.height >= 24 {
@@ -119,7 +160,9 @@ func (m model) layoutMetrics() layoutMetrics {
 		compact:             compact,
 		widthCompact:        widthCompact,
 		heightCompact:       heightCompact,
+		heightMode:          heightMode,
 		playbarCompact:      playbarCompact,
+		playbarMinimal:      playbarMinimal,
 		playbarProgressLen:  playbarProgressLen,
 		listHeight:          listHeight,
 		resultsChromeHeight: resultsChromeHeight,
@@ -128,6 +171,20 @@ func (m model) layoutMetrics() layoutMetrics {
 		pagePaddingY:        paddingY,
 		railEnabled:         railEnabled,
 		railWidth:           railWidth,
+		footerVisible:       footerVisible,
+		footerShowStatus:    footerShowStatus,
+		footerShowHints:     footerShowHints,
+	}
+}
+
+func classifyHeightMode(height int) layoutHeightMode {
+	switch {
+	case height < 18:
+		return heightModeMinimal
+	case height < 24:
+		return heightModeCompact
+	default:
+		return heightModeNormal
 	}
 }
 
@@ -166,8 +223,11 @@ func renderListProgress(index, total int) string {
 }
 
 func (m model) progressBar(width int) string {
-	if m.playback.Duration <= 0 || width <= 0 {
-		return strings.Repeat("─", maxInt(8, width))
+	if width <= 0 {
+		return ""
+	}
+	if m.playback.Duration <= 0 {
+		return strings.Repeat("─", width)
 	}
 
 	filled := int((m.playback.Progress * time.Duration(width)) / m.playback.Duration)
@@ -215,6 +275,13 @@ func maxInt(a, b int) int {
 	return b
 }
 
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func clampInt(value, min, max int) int {
 	if value < min {
 		return min
@@ -249,6 +316,41 @@ func truncateText(value string, width int) string {
 		return "…"
 	}
 	return string(truncated) + "…"
+}
+
+func joinAndTruncate(width int, separator string, parts ...string) string {
+	if width <= 0 {
+		return ""
+	}
+
+	filtered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			filtered = append(filtered, part)
+		}
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+
+	line := filtered[0]
+	if lipgloss.Width(line) >= width {
+		return truncateText(line, width)
+	}
+	for _, part := range filtered[1:] {
+		candidate := line + separator + part
+		if lipgloss.Width(candidate) <= width {
+			line = candidate
+			continue
+		}
+		remaining := width - lipgloss.Width(line) - lipgloss.Width(separator)
+		if remaining <= 0 {
+			return truncateText(line, width)
+		}
+		return line + separator + truncateText(part, remaining)
+	}
+	return line
 }
 
 func clampFloat(value, min, max float64) float64 {

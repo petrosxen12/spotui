@@ -171,6 +171,13 @@ func fetchDevicesCmd(service app.PlayerService, pushHistory bool) tea.Cmd {
 	}
 }
 
+func refreshDeviceCacheCmd(service app.PlayerService) tea.Cmd {
+	return func() tea.Msg {
+		devices, err := service.ListDevices(context.Background())
+		return deviceCacheMsg{devices: devices, err: err}
+	}
+}
+
 func selectDeviceByNameCmd(service app.PlayerService, name string) tea.Cmd {
 	return func() tea.Msg {
 		device, err := service.SetDeviceByName(context.Background(), name)

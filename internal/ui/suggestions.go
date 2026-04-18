@@ -1,9 +1,10 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type suggestion struct {
@@ -12,18 +13,19 @@ type suggestion struct {
 	description string
 }
 
-func (m *model) refreshSuggestions() {
+func (m *model) refreshSuggestions() tea.Cmd {
 	value := m.input.Value()
 	suggestions := m.buildSuggestions(value)
 	if len(suggestions) == 0 {
 		m.closeSuggestions()
-		return
+		return m.maybeRefreshDeviceCache(value)
 	}
 	m.suggestions = suggestions
 	if m.suggestionIndex >= len(m.suggestions) {
 		m.suggestionIndex = 0
 	}
 	m.suggestionsOpen = true
+	return m.maybeRefreshDeviceCache(value)
 }
 
 func (m *model) closeSuggestions() {
@@ -71,13 +73,12 @@ func (m model) buildSuggestions(raw string) []suggestion {
 
 	switch command {
 	case "device":
-		devices, err := m.service.ListDevices(context.Background())
-		if err != nil {
+		if !m.deviceCacheReady {
 			return nil
 		}
 		prefix := strings.ToLower(strings.TrimSpace(arg))
 		matches := make([]suggestion, 0)
-		for _, device := range devices {
+		for _, device := range m.deviceCache {
 			name := device.Name
 			if prefix == "" || strings.HasPrefix(strings.ToLower(name), prefix) {
 				matches = append(matches, suggestion{
@@ -93,6 +94,25 @@ func (m model) buildSuggestions(raw string) []suggestion {
 	default:
 		return nil
 	}
+}
+
+func (m *model) maybeRefreshDeviceCache(raw string) tea.Cmd {
+	if m.deviceCacheReady || m.deviceCacheBusy {
+		return nil
+	}
+	if !isDeviceSuggestionInput(raw) {
+		return nil
+	}
+	m.deviceCacheBusy = true
+	return refreshDeviceCacheCmd(m.service)
+}
+
+func isDeviceSuggestionInput(raw string) bool {
+	if !strings.HasPrefix(raw, "/") {
+		return false
+	}
+	command, _, hasSpace := parseSlashInput(raw)
+	return command == "device" && hasSpace
 }
 
 func (m model) playSuggestions(prefix string) []suggestion {

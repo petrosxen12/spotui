@@ -46,7 +46,8 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 	}
 
 	line1 := d.renderPrimaryLine(titleText, metaText, index == m.Index())
-	line2 := "  " + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(rowDescStyle.Render(descText))
+	descWidth := maxInt(1, d.contentWidth()-2)
+	line2 := "  " + rowDescStyle.Render(truncateText(descText, descWidth))
 
 	if index == m.Index() {
 		block := strings.Join([]string{
@@ -71,18 +72,19 @@ func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, sel
 	}
 
 	if !d.wideLayout || d.contentWidth() < 36 {
+		titleWidth := maxInt(1, d.contentWidth()-lipgloss.Width(metaText)-1)
 		left := lipgloss.JoinHorizontal(
 			lipgloss.Left,
 			metaStyleToUse.Render(metaText),
 			" ",
-			titleStyleToUse.Render(titleText),
+			titleStyleToUse.Render(truncateText(titleText, titleWidth)),
 		)
 		return prefix + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(left)
 	}
 
 	meta := metaStyleToUse.Render(metaText)
 	leftWidth := maxInt(1, d.contentWidth()-lipgloss.Width(meta)-2)
-	left := lipgloss.NewStyle().MaxWidth(leftWidth).Render(titleStyleToUse.Render(titleText))
+	left := titleStyleToUse.Render(truncateText(titleText, leftWidth))
 	gap := d.contentWidth() - lipgloss.Width(left) - lipgloss.Width(meta)
 	if gap < 2 {
 		gap = 2

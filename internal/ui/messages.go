@@ -29,6 +29,11 @@ type devicesMsg struct {
 	pushHistory bool
 }
 
+type deviceCacheMsg struct {
+	devices []app.Device
+	err     error
+}
+
 type deviceSelectedMsg struct {
 	device app.Device
 	err    error

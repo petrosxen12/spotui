@@ -78,7 +78,7 @@ var (
 				Bold(true)
 
 	selectedRowStyle = lipgloss.NewStyle().
-			Padding(0, 0)
+				Padding(0, 0)
 
 	selectedTitleStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#111513", Dark: "#F4F7F5"}).
@@ -113,10 +113,11 @@ func (m model) View() string {
 
 	dock := m.dockContainerStyle(layout).Width(layout.bodyWidth).Render(m.commandDockView(layout))
 
-	mainContent := strings.Join([]string{
-		m.resultsPanel(layout.mainWidth, layout),
-		m.footerPanel(layout.mainWidth, layout),
-	}, "\n")
+	mainSections := []string{m.resultsPanel(layout.mainWidth, layout)}
+	if layout.footerVisible {
+		mainSections = append(mainSections, m.footerPanel(layout.mainWidth, layout))
+	}
+	mainContent := strings.Join(mainSections, "\n")
 	if layout.railEnabled {
 		mainContent = lipgloss.JoinHorizontal(
 			lipgloss.Top,
@@ -184,28 +185,28 @@ func (m model) playbarView(layout layoutMetrics) string {
 		"  ",
 		m.playingStatusStyle().Render("● "+strings.ToLower(status)),
 	)
-	progressGroup := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		kickerStyle.Render(progress),
-		"  ",
-		infoStyle.Render(timing),
-	)
-	if layout.playbarCompact {
-		secondary := artist + "  ·  " + device
-		if m.playback.NextItemName != "" {
-			nextFragment := "  ·  next " + m.playback.NextItemName
-			if available := layout.bodyWidth - lipgloss.Width(secondary); available > 8 {
-				secondary += truncateText(nextFragment, available)
-			}
-		}
-		left := lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			leftPrefix,
-			"  ",
-			m.nowPlayingTitleStyle().Render(title),
-		)
+	progressGroup := m.playbarProgressView(layout, progress, timing)
+	if layout.playbarMinimal {
+		primary := m.playbarPrimaryLine(layout.bodyWidth, leftPrefix, title)
 		return strings.Join([]string{
-			left,
+			primary,
+			progressGroup,
+		}, "\n")
+	}
+	if layout.playbarCompact {
+		if layout.bodyWidth < 36 {
+			return strings.Join([]string{
+				m.playbarPrimaryLine(layout.bodyWidth, leftPrefix, title),
+				progressGroup,
+			}, "\n")
+		}
+		secondaryParts := []string{artist, device}
+		if m.playback.NextItemName != "" {
+			secondaryParts = append(secondaryParts, "next "+m.playback.NextItemName)
+		}
+		secondary := joinAndTruncate(layout.bodyWidth, "  ·  ", secondaryParts...)
+		return strings.Join([]string{
+			m.playbarPrimaryLine(layout.bodyWidth, leftPrefix, title),
 			subtitleStyle.Render(secondary),
 			progressGroup,
 		}, "\n")
@@ -239,17 +240,50 @@ func (m model) playbarView(layout layoutMetrics) string {
 		lipgloss.Left,
 		leftPrefix,
 		"  ",
-		m.nowPlayingTitleStyle().Render(title),
+		m.nowPlayingTitleStyle().Render(truncateText(title, maxInt(1, layout.bodyWidth-lipgloss.Width(leftPrefix)-2))),
 	)
 	right := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		subtitleStyle.Render(artist),
+		subtitleStyle.Render(truncateText(artist, maxInt(1, layout.bodyWidth))),
 		"  ·  ",
-		metaPillStyle.Render(device),
+		metaPillStyle.Render(truncateText(device, maxInt(1, layout.bodyWidth/3))),
 		"  ",
 		progressGroup,
 	)
 	return heroStyle.Render(strings.Join([]string{left, right}, "\n"))
+}
+
+func (m model) playbarPrimaryLine(width int, leftPrefix string, title string) string {
+	titleWidth := maxInt(1, width-lipgloss.Width(leftPrefix)-2)
+	return lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		leftPrefix,
+		"  ",
+		m.nowPlayingTitleStyle().Render(truncateText(title, titleWidth)),
+	)
+}
+
+func (m model) playbarProgressView(layout layoutMetrics, progress string, timing string) string {
+	if layout.bodyWidth <= 0 {
+		return ""
+	}
+	timingText := truncateText(timing, layout.bodyWidth)
+	if layout.bodyWidth < 20 || progress == "" {
+		return infoStyle.Render(timingText)
+	}
+
+	barWidth := layout.bodyWidth - lipgloss.Width(timingText) - 2
+	if barWidth < 4 {
+		return infoStyle.Render(timingText)
+	}
+	barWidth = minInt(barWidth, layout.playbarProgressLen)
+
+	return lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		kickerStyle.Render(m.progressBar(barWidth)),
+		"  ",
+		infoStyle.Render(timingText),
+	)
 }
 
 func (m model) resultsPanel(width int, layout layoutMetrics) string {
@@ -295,18 +329,29 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 		}
 	}
 
+	header = truncateText(header, width)
+	countLabel = truncateText(countLabel, width)
+
 	lines := []string{eyebrowStyle.Render(header)}
 	progressText := strings.TrimSpace(m.listProgressText())
 	if progressText != "" {
-		lines = append(lines, kickerStyle.Render(countLabel+"  ·  "+progressText))
+		lines = append(lines, kickerStyle.Render(joinAndTruncate(width, "  ·  ", countLabel, progressText)))
 	} else {
 		lines = append(lines, kickerStyle.Render(countLabel))
 	}
-	lines = append(lines, "", body)
+	if layout.heightMode == heightModeMinimal {
+		lines = append(lines, body)
+	} else {
+		lines = append(lines, "", body)
+	}
 	return style.Width(width).Render(strings.Join(lines, "\n"))
 }
 
 func (m model) footerPanel(width int, layout layoutMetrics) string {
+	if !layout.footerVisible {
+		return ""
+	}
+
 	statusTone := infoStyle
 	if m.lastActionErr {
 		statusTone = errorStyle
@@ -314,12 +359,12 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 		statusTone = successStyle
 	}
 
-	lines := []string{
-		infoStyle.Render(m.connectionStatus),
-		statusTone.Render(m.lastAction),
+	lines := []string{infoStyle.Render(truncateText(m.connectionStatus, width))}
+	if layout.footerShowStatus && m.lastAction != "" {
+		lines = append(lines, statusTone.Render(truncateText(m.lastAction, width)))
 	}
-	if !layout.widthCompact {
-		lines = append(lines, commandHintStyle.Render("tab focus  ·  enter play  ·  / commands  ·  q quit"))
+	if layout.footerShowHints {
+		lines = append(lines, commandHintStyle.Render(truncateText("tab focus  ·  enter play  ·  / commands  ·  q quit", width)))
 	}
 	return panelStyle.Width(width).Render(strings.Join(lines, "\n"))
 }
@@ -398,14 +443,17 @@ func (m model) suggestionsView(layout layoutMetrics) string {
 	if len(visible) > 5 {
 		visible = visible[:5]
 	}
+	contentWidth := maxInt(1, layout.bodyWidth-6)
 	lines := make([]string, 0, len(visible))
 	for i, suggestion := range visible {
 		line := suggestion.value
 		if suggestion.description != "" {
-			line += "  " + commandHintStyle.Render(suggestion.description)
+			line = joinAndTruncate(contentWidth, "  ", suggestion.value, suggestion.description)
+		} else {
+			line = truncateText(line, contentWidth)
 		}
 		if i == m.suggestionIndex {
-			lines = append(lines, suggestionSelectedStyle.Render("› ")+line)
+			lines = append(lines, suggestionSelectedStyle.Render("› "+line))
 		} else {
 			lines = append(lines, commandHintStyle.Render("  "+line))
 		}
