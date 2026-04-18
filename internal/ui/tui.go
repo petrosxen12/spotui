@@ -302,13 +302,14 @@ type viewState struct {
 }
 
 type layoutMetrics struct {
-	bodyWidth          int
-	compact            bool
-	playbarProgressLen int
-	listHeight         int
-	inputWidth         int
-	pagePaddingX       int
-	pagePaddingY       int
+	bodyWidth           int
+	compact             bool
+	playbarProgressLen  int
+	listHeight          int
+	resultsChromeHeight int
+	inputWidth          int
+	pagePaddingX        int
+	pagePaddingY        int
 }
 
 func Run(service app.PlayerService) error {
@@ -322,6 +323,7 @@ func newModel(service app.PlayerService) model {
 	results := list.New([]list.Item{}, resultDelegate{}, 0, 0)
 	results.Title = ""
 	results.SetShowStatusBar(false)
+	results.SetShowPagination(false)
 	results.SetShowHelp(false)
 	results.SetFilteringEnabled(false)
 	results.DisableQuitKeybindings()
@@ -575,7 +577,7 @@ func (m *model) resize() {
 }
 
 func (m *model) resizeWithLayout(layout layoutMetrics) {
-	m.list.SetSize(maxInt(20, layout.bodyWidth), layout.listHeight)
+	m.list.SetSize(maxInt(20, layout.bodyWidth), maxInt(1, layout.listHeight-layout.resultsChromeHeight))
 	m.input.Width = layout.inputWidth
 }
 
@@ -594,23 +596,36 @@ func (m model) layoutMetrics() layoutMetrics {
 	compact := bodyWidth < 72 || m.height < 26
 
 	playbarProgressLen := clampInt(bodyWidth/4, 12, 32)
-
-	listHeight := m.height - 9
-	if compact {
-		listHeight -= 2
-	}
-	listHeight = clampInt(listHeight, 6, 26)
-
 	inputWidth := maxInt(10, bodyWidth-2)
+	resultsChromeHeight := 3
+
+	tempLayout := layoutMetrics{
+		bodyWidth:           bodyWidth,
+		compact:             compact,
+		playbarProgressLen:  playbarProgressLen,
+		inputWidth:          inputWidth,
+		pagePaddingX:        paddingX,
+		pagePaddingY:        paddingY,
+		resultsChromeHeight: resultsChromeHeight,
+	}
+
+	pageVertical := paddingY * 2
+	playbarHeight := lipgloss.Height(playbarStyle.Width(bodyWidth).Render(m.playbarView(tempLayout)))
+	footerHeight := lipgloss.Height(m.footerPanel(bodyWidth, tempLayout))
+	dockHeight := lipgloss.Height(dockStyle.Width(bodyWidth).Render(m.commandDockView(tempLayout)))
+	sectionGaps := 3
+	available := m.height - pageVertical - playbarHeight - footerHeight - dockHeight - sectionGaps
+	listHeight := clampInt(available, 6, maxInt(6, available))
 
 	return layoutMetrics{
-		bodyWidth:          bodyWidth,
-		compact:            compact,
-		playbarProgressLen: playbarProgressLen,
-		listHeight:         listHeight,
-		inputWidth:         inputWidth,
-		pagePaddingX:       paddingX,
-		pagePaddingY:       paddingY,
+		bodyWidth:           bodyWidth,
+		compact:             compact,
+		playbarProgressLen:  playbarProgressLen,
+		listHeight:          listHeight,
+		resultsChromeHeight: resultsChromeHeight,
+		inputWidth:          inputWidth,
+		pagePaddingX:        paddingX,
+		pagePaddingY:        paddingY,
 	}
 }
 
@@ -802,9 +817,9 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 
 	lines := []string{eyebrowStyle.Render(header)}
 	if layout.compact {
-		lines = append(lines, kickerStyle.Render(countLabel))
+		lines = append(lines, kickerStyle.Render(countLabel+"  "+m.listProgressText()))
 	} else {
-		lines = append(lines, kickerStyle.Render(countLabel))
+		lines = append(lines, kickerStyle.Render(countLabel+"  "+m.listProgressText()))
 	}
 	lines = append(lines, "", body)
 	return style.Width(width).Render(strings.Join(lines, "\n"))
@@ -908,6 +923,40 @@ func (m model) suggestionsView(layout layoutMetrics) string {
 		}
 	}
 	return suggestionPopupStyle.Width(maxInt(20, layout.bodyWidth-4)).Render(strings.Join(lines, "\n"))
+}
+
+func (m model) listProgressText() string {
+	total := len(m.list.Items())
+	if total <= 1 {
+		return ""
+	}
+
+	index := m.list.Index()
+	if index < 0 {
+		index = 0
+	}
+	if index >= total {
+		index = total - 1
+	}
+
+	percent := int(float64(index+1) / float64(total) * 100)
+	return renderListProgress(index, total) + fmt.Sprintf(" %d%%", percent)
+}
+
+func renderListProgress(index, total int) string {
+	if total <= 1 {
+		return ""
+	}
+
+	const width = 8
+	filled := int(math.Round(float64(index+1) / float64(total) * float64(width)))
+	if filled < 1 {
+		filled = 1
+	}
+	if filled > width {
+		filled = width
+	}
+	return strings.Repeat("•", filled) + strings.Repeat("·", width-filled)
 }
 
 func (m model) playingStatusStyle() lipgloss.Style {
