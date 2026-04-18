@@ -73,10 +73,24 @@ func (m model) layoutMetrics() layoutMetrics {
 		bodyWidth = 20
 	}
 
+	layoutForRail := m.layoutMetricsForWidth(bodyWidth, paddingX, paddingY, heightMode, true)
+	if layoutForRail.railEnabled {
+		mainHeight := lipgloss.Height(m.mainContent(layoutForRail))
+		railHeight := lipgloss.Height(contextRailStyle.Width(layoutForRail.railWidth).Render(m.contextRailView(layoutForRail)))
+		if railHeight > mainHeight {
+			return m.layoutMetricsForWidth(bodyWidth, paddingX, paddingY, heightMode, false)
+		}
+	}
+
+	return layoutForRail
+}
+
+func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, heightMode layoutHeightMode, allowRail bool) layoutMetrics {
+
 	mainWidth := bodyWidth
 	railEnabled := false
 	railWidth := 0
-	if bodyWidth >= 118 && heightMode == heightModeNormal {
+	if allowRail && bodyWidth >= 118 && heightMode != heightModeMinimal && m.height >= 20 {
 		candidateRailWidth := clampInt(bodyWidth/5, 22, 28)
 		candidateMainWidth := bodyWidth - candidateRailWidth - 3
 		if candidateMainWidth >= 72 {

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/petrosxen/spotui/internal/app"
 )
 
@@ -28,7 +29,7 @@ func TestClassifyHeightMode(t *testing.T) {
 func TestLayoutMetricsShortHeightModes(t *testing.T) {
 	m := newModel(nil)
 
-	t.Run("compact height disables rail and footer hints", func(t *testing.T) {
+	t.Run("compact height keeps rail on wide terminals but hides footer hints", func(t *testing.T) {
 		m.width = 140
 		m.height = 22
 
@@ -37,14 +38,28 @@ func TestLayoutMetricsShortHeightModes(t *testing.T) {
 		if layout.heightMode != heightModeCompact {
 			t.Fatalf("heightMode = %q, want %q", layout.heightMode, heightModeCompact)
 		}
-		if layout.railEnabled {
-			t.Fatal("expected context rail to be disabled in compact height mode")
+		if !layout.railEnabled {
+			t.Fatal("expected context rail to remain enabled on wide compact-height terminals")
 		}
 		if layout.footerShowHints {
 			t.Fatal("expected footer hints to be hidden in compact height mode")
 		}
 		if !layout.playbarCompact {
 			t.Fatal("expected compact playbar in compact height mode")
+		}
+	})
+
+	t.Run("minimal height still disables rail", func(t *testing.T) {
+		m.width = 140
+		m.height = 19
+
+		layout := m.layoutMetrics()
+
+		if layout.heightMode != heightModeCompact {
+			t.Fatalf("heightMode = %q, want %q", layout.heightMode, heightModeCompact)
+		}
+		if layout.railEnabled {
+			t.Fatal("expected context rail to stay disabled on very short compact-height terminals")
 		}
 	})
 
@@ -105,5 +120,42 @@ func TestLowHeightPanelsCollapseChrome(t *testing.T) {
 	playbar := m.playbarView(layout)
 	if strings.Contains(playbar, "No active device") {
 		t.Fatal("expected minimal playbar to omit the secondary metadata line")
+	}
+}
+
+func TestWideCompactHeightDisablesRailWhenContextWouldOverflow(t *testing.T) {
+	m := newModel(nil)
+	m.width = 200
+	m.height = 22
+	m.query = "very long query that triggers the context rail content"
+	m.listMode = listModeSearch
+	m.connectionStatus = "Connected as tester"
+	m.lastAction = "Loaded 24 results for a long search query"
+	m.playback = app.PlaybackState{
+		IsPlaying:      true,
+		ItemName:       "Current Track",
+		ArtistName:     "Current Artist",
+		NextItemName:   "Upcoming Track With A Longer Name",
+		NextArtistName: "Upcoming Artist",
+		Device:         app.Device{Name: "Studio Speakers"},
+	}
+	m.viewHistory = []viewState{{query: "previous search"}}
+	m.list.SetItems([]list.Item{
+		resultItem{
+			title:       "Selected Result Title",
+			description: "Selected Result Description",
+			kind:        "track",
+		},
+	})
+	m.list.Select(0)
+
+	layout := m.layoutMetrics()
+	if layout.railEnabled {
+		t.Fatal("expected layout to disable rail when wide compact-height search context would overflow")
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "spotui") {
+		t.Fatal("expected playbar to remain visible in rendered view")
 	}
 }

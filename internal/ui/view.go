@@ -113,11 +113,7 @@ func (m model) View() string {
 
 	dock := m.dockContainerStyle(layout).Width(layout.bodyWidth).Render(m.commandDockView(layout))
 
-	mainSections := []string{m.resultsPanel(layout.mainWidth, layout)}
-	if layout.footerVisible {
-		mainSections = append(mainSections, m.footerPanel(layout.mainWidth, layout))
-	}
-	mainContent := strings.Join(mainSections, "\n")
+	mainContent := m.mainContent(layout)
 	if layout.railEnabled {
 		mainContent = lipgloss.JoinHorizontal(
 			lipgloss.Top,
@@ -132,6 +128,14 @@ func (m model) View() string {
 		mainContent,
 		dock,
 	}, "\n"))
+}
+
+func (m model) mainContent(layout layoutMetrics) string {
+	mainSections := []string{m.resultsPanel(layout.mainWidth, layout)}
+	if layout.footerVisible {
+		mainSections = append(mainSections, m.footerPanel(layout.mainWidth, layout))
+	}
+	return strings.Join(mainSections, "\n")
 }
 
 func (m model) playbarContainerStyle(layout layoutMetrics) lipgloss.Style {
