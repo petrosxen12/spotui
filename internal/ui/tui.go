@@ -41,9 +41,7 @@ var (
 			Padding(0, 0)
 
 	panelFocusedStyle = panelStyle.Copy().
-				BorderLeft(true).
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#888888"})
+				Bold(true)
 
 	dockStyle = lipgloss.NewStyle().
 			MarginTop(1)
@@ -95,10 +93,7 @@ var (
 				Bold(true)
 
 	selectedRowStyle = lipgloss.NewStyle().
-				Padding(0, 0).
-				BorderLeft(true).
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#444444", Dark: "#D0D0D0"})
+				Padding(0, 0)
 
 	selectedTitleStyle = lipgloss.NewStyle().
 				Bold(true)
@@ -111,9 +106,18 @@ var (
 
 	rowDescStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#9A9A9A"})
+
+	contextRailStyle = lipgloss.NewStyle().
+				BorderLeft(true).
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#888888"}).
+				PaddingLeft(1)
 )
 
-type resultDelegate struct{}
+type resultDelegate struct {
+	width      int
+	wideLayout bool
+}
 
 func (d resultDelegate) Height() int  { return 2 }
 func (d resultDelegate) Spacing() int { return 1 }
@@ -124,42 +128,73 @@ func (d resultDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
 func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	var titleText string
 	var descText string
-	var kind string
+	var metaText string
 
 	switch entry := item.(type) {
 	case resultItem:
 		titleText = entry.title
 		descText = entry.description
-		kind = entry.kind
+		metaText = strings.ToUpper(entry.kind)
 	case deviceItem:
 		titleText = entry.title
 		descText = entry.description
-		kind = "device"
+		metaText = "DEVICE"
 	case infoItem:
 		titleText = entry.title
 		descText = entry.description
-		kind = "info"
+		metaText = "HELP"
 	default:
 		return
 	}
 
-	meta := metaPillStyle.Render("[" + strings.ToUpper(kind) + "]")
-	title := rowTitleStyle.Render(titleText)
-	desc := rowDescStyle.Render(descText)
-
-	line1 := lipgloss.JoinHorizontal(lipgloss.Left, meta, " ", title)
-	line2 := "  " + desc
+	line1 := d.renderPrimaryLine(titleText, metaText, index == m.Index())
+	line2 := "  " + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(rowDescStyle.Render(descText))
 
 	if index == m.Index() {
 		block := strings.Join([]string{
-			selectedTitleStyle.Render("> " + line1),
-			selectedDescStyle.Render("  " + descText),
+			selectedTitleStyle.Render(line1),
+			selectedDescStyle.Render(line2),
 		}, "\n")
 		fmt.Fprint(w, selectedRowStyle.Render(block))
 		return
 	}
 
-	fmt.Fprint(w, strings.Join([]string{"  " + line1, line2}, "\n"))
+	fmt.Fprint(w, strings.Join([]string{line1, line2}, "\n"))
+}
+
+func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, selected bool) string {
+	prefix := "  "
+	titleStyleToUse := rowTitleStyle
+	if selected {
+		prefix = "> "
+		titleStyleToUse = selectedTitleStyle
+	}
+
+	if !d.wideLayout || d.contentWidth() < 36 {
+		left := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			metaPillStyle.Render("["+metaText+"]"),
+			" ",
+			titleStyleToUse.Render(titleText),
+		)
+		return prefix + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(left)
+	}
+
+	meta := metaPillStyle.Render(metaText)
+	leftWidth := maxInt(1, d.contentWidth()-lipgloss.Width(meta)-2)
+	left := lipgloss.NewStyle().MaxWidth(leftWidth).Render(titleStyleToUse.Render(titleText))
+	gap := d.contentWidth() - lipgloss.Width(left) - lipgloss.Width(meta)
+	if gap < 2 {
+		gap = 2
+	}
+	return prefix + left + strings.Repeat(" ", gap) + meta
+}
+
+func (d resultDelegate) contentWidth() int {
+	if d.width <= 0 {
+		return 40
+	}
+	return maxInt(1, d.width-2)
 }
 
 type resultItem struct {
@@ -303,6 +338,7 @@ type viewState struct {
 
 type layoutMetrics struct {
 	bodyWidth           int
+	mainWidth           int
 	compact             bool
 	playbarProgressLen  int
 	listHeight          int
@@ -310,6 +346,8 @@ type layoutMetrics struct {
 	inputWidth          int
 	pagePaddingX        int
 	pagePaddingY        int
+	railEnabled         bool
+	railWidth           int
 }
 
 func Run(service app.PlayerService) error {
@@ -322,6 +360,7 @@ func Run(service app.PlayerService) error {
 func newModel(service app.PlayerService) model {
 	results := list.New([]list.Item{}, resultDelegate{}, 0, 0)
 	results.Title = ""
+	results.SetShowTitle(false)
 	results.SetShowStatusBar(false)
 	results.SetShowPagination(false)
 	results.SetShowHelp(false)
@@ -560,10 +599,22 @@ func (m model) View() string {
 	}
 	dock := dockStyleToUse.Width(layout.bodyWidth).Render(m.commandDockView(layout))
 
+	mainContent := strings.Join([]string{
+		m.resultsPanel(layout.mainWidth, layout),
+		m.footerPanel(layout.mainWidth, layout),
+	}, "\n")
+	if layout.railEnabled {
+		mainContent = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			mainContent,
+			"   ",
+			contextRailStyle.Width(layout.railWidth).Render(m.contextRailView(layout)),
+		)
+	}
+
 	return page.Width(m.width).Render(strings.Join([]string{
 		playbar,
-		m.resultsPanel(layout.bodyWidth, layout),
-		m.footerPanel(layout.bodyWidth, layout),
+		mainContent,
 		dock,
 	}, "\n"))
 }
@@ -577,7 +628,11 @@ func (m *model) resize() {
 }
 
 func (m *model) resizeWithLayout(layout layoutMetrics) {
-	m.list.SetSize(maxInt(20, layout.bodyWidth), maxInt(1, layout.listHeight-layout.resultsChromeHeight))
+	m.list.SetDelegate(resultDelegate{
+		width:      layout.mainWidth,
+		wideLayout: layout.mainWidth >= 76 && !layout.compact,
+	})
+	m.list.SetSize(maxInt(20, layout.mainWidth), maxInt(1, layout.listHeight-layout.resultsChromeHeight))
 	m.input.Width = layout.inputWidth
 }
 
@@ -593,20 +648,36 @@ func (m model) layoutMetrics() layoutMetrics {
 		bodyWidth = 20
 	}
 
+	mainWidth := bodyWidth
+	railEnabled := false
+	railWidth := 0
+	if bodyWidth >= 118 {
+		candidateRailWidth := clampInt(bodyWidth/5, 22, 28)
+		candidateMainWidth := bodyWidth - candidateRailWidth - 3
+		if candidateMainWidth >= 72 {
+			mainWidth = candidateMainWidth
+			railEnabled = true
+			railWidth = candidateRailWidth
+		}
+	}
+
 	compact := bodyWidth < 72 || m.height < 26
 
-	playbarProgressLen := clampInt(bodyWidth/4, 12, 32)
+	playbarProgressLen := clampInt(mainWidth/4, 12, 32)
 	inputWidth := maxInt(10, bodyWidth-2)
 	resultsChromeHeight := 3
 
 	tempLayout := layoutMetrics{
 		bodyWidth:           bodyWidth,
+		mainWidth:           mainWidth,
 		compact:             compact,
 		playbarProgressLen:  playbarProgressLen,
 		inputWidth:          inputWidth,
 		pagePaddingX:        paddingX,
 		pagePaddingY:        paddingY,
 		resultsChromeHeight: resultsChromeHeight,
+		railEnabled:         railEnabled,
+		railWidth:           railWidth,
 	}
 
 	pageVertical := paddingY * 2
@@ -619,6 +690,7 @@ func (m model) layoutMetrics() layoutMetrics {
 
 	return layoutMetrics{
 		bodyWidth:           bodyWidth,
+		mainWidth:           mainWidth,
 		compact:             compact,
 		playbarProgressLen:  playbarProgressLen,
 		listHeight:          listHeight,
@@ -626,6 +698,8 @@ func (m model) layoutMetrics() layoutMetrics {
 		inputWidth:          inputWidth,
 		pagePaddingX:        paddingX,
 		pagePaddingY:        paddingY,
+		railEnabled:         railEnabled,
+		railWidth:           railWidth,
 	}
 }
 
@@ -746,11 +820,54 @@ func (m model) playbarView(layout layoutMetrics) string {
 	progress := m.progressBar(layout.playbarProgressLen)
 	timing := formatDuration(m.playback.Progress) + " / " + formatDuration(m.playback.Duration)
 
-	left := lipgloss.JoinHorizontal(
+	leftPrefix := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		eyebrowStyle.Render("spotui"),
 		"  ",
 		m.playingStatusStyle().Render(strings.ToLower(status)),
+	)
+	progressGroup := kickerStyle.Render(progress + "  " + timing)
+	if layout.compact {
+		left := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			leftPrefix,
+			"  ",
+			m.nowPlayingTitleStyle().Render(title),
+		)
+		return strings.Join([]string{
+			left,
+			subtitleStyle.Render(artist),
+			kickerStyle.Render(progress + "  " + timing),
+		}, "\n")
+	}
+
+	minTitleWidth := 12
+	gapWidth := 2
+	leftMeta := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		subtitleStyle.Render(artist),
+		"  ·  ",
+		metaPillStyle.Render(device),
+	)
+	availableTitleWidth := layout.bodyWidth - lipgloss.Width(leftPrefix) - lipgloss.Width(leftMeta) - lipgloss.Width(progressGroup) - (gapWidth * 3)
+	if availableTitleWidth >= minTitleWidth {
+		left := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			leftPrefix,
+			"  ",
+			m.nowPlayingTitleStyle().Render(truncateText(title, availableTitleWidth)),
+			"  ·  ",
+			leftMeta,
+		)
+		gap := layout.bodyWidth - lipgloss.Width(left) - lipgloss.Width(progressGroup)
+		if gap >= gapWidth {
+			return lipgloss.JoinHorizontal(lipgloss.Left, left, strings.Repeat(" ", gap), progressGroup)
+		}
+	}
+
+	left := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		leftPrefix,
 		"  ",
 		m.nowPlayingTitleStyle().Render(title),
 	)
@@ -760,15 +877,8 @@ func (m model) playbarView(layout layoutMetrics) string {
 		"  ·  ",
 		metaPillStyle.Render(device),
 		"  ",
-		kickerStyle.Render(progress+"  "+timing),
+		progressGroup,
 	)
-	if layout.compact {
-		return strings.Join([]string{
-			left,
-			subtitleStyle.Render(artist),
-			kickerStyle.Render(progress + "  " + timing),
-		}, "\n")
-	}
 	return heroStyle.Render(strings.Join([]string{left, right}, "\n"))
 }
 
@@ -841,6 +951,53 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 		lines = append(lines, commandHintStyle.Render("tab focus  ·  enter select  ·  / commands  ·  q quit"))
 	}
 	return panelStyle.Width(width).Render(strings.Join(lines, "\n"))
+}
+
+func (m model) contextRailView(layout layoutMetrics) string {
+	lines := []string{eyebrowStyle.Render("Context")}
+
+	switch m.listMode {
+	case listModeDevices:
+		lines = append(lines, subtitleStyle.Render("Browsing devices"))
+	case listModeHelp:
+		lines = append(lines, subtitleStyle.Render("Command reference"))
+	default:
+		if m.query != "" {
+			lines = append(lines, subtitleStyle.Render("Search"))
+			lines = append(lines, titleStyle.Render(truncateText(m.query, layout.railWidth)))
+		} else {
+			lines = append(lines, subtitleStyle.Render("Ready for search"))
+		}
+	}
+
+	if selected := m.selectedContextLines(layout.railWidth); len(selected) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, subtitleStyle.Render("Selection"))
+		lines = append(lines, selected...)
+	}
+
+	if total := len(m.list.Items()); total > 0 {
+		index := clampInt(m.list.Index()+1, 1, total)
+		remaining := maxInt(0, total-index)
+		lines = append(lines, "")
+		lines = append(lines, subtitleStyle.Render("List"))
+		lines = append(lines, infoStyle.Render(fmt.Sprintf("%d of %d", index, total)))
+		lines = append(lines, infoStyle.Render(fmt.Sprintf("%d left", remaining)))
+	}
+
+	if m.playback.Device.Name != "" {
+		lines = append(lines, "")
+		lines = append(lines, subtitleStyle.Render("Output"))
+		lines = append(lines, infoStyle.Render(truncateText(m.playback.Device.Name, layout.railWidth)))
+	}
+
+	if depth := len(m.viewHistory); depth > 0 {
+		lines = append(lines, "")
+		lines = append(lines, subtitleStyle.Render("Back"))
+		lines = append(lines, infoStyle.Render(fmt.Sprintf("esc × %d", depth)))
+	}
+
+	return lipgloss.NewStyle().Width(layout.railWidth).Render(strings.Join(lines, "\n"))
 }
 
 func (m model) commandDockView(layout layoutMetrics) string {
@@ -923,6 +1080,32 @@ func (m model) suggestionsView(layout layoutMetrics) string {
 		}
 	}
 	return suggestionPopupStyle.Width(maxInt(20, layout.bodyWidth-4)).Render(strings.Join(lines, "\n"))
+}
+
+func (m model) selectedContextLines(width int) []string {
+	switch item := m.list.SelectedItem().(type) {
+	case resultItem:
+		lines := []string{titleStyle.Render(truncateText(item.title, width))}
+		if item.description != "" {
+			lines = append(lines, infoStyle.Render(truncateText(item.description, width)))
+		}
+		lines = append(lines, infoStyle.Render(strings.ToUpper(item.kind)))
+		return lines
+	case deviceItem:
+		lines := []string{titleStyle.Render(truncateText(item.title, width))}
+		if item.description != "" {
+			lines = append(lines, infoStyle.Render(truncateText(item.description, width)))
+		}
+		return lines
+	case infoItem:
+		lines := []string{titleStyle.Render(truncateText(item.title, width))}
+		if item.description != "" {
+			lines = append(lines, infoStyle.Render(truncateText(item.description, width)))
+		}
+		return lines
+	default:
+		return nil
+	}
 }
 
 func (m model) listProgressText() string {
@@ -1325,6 +1508,32 @@ func clampInt(value, min, max int) int {
 		return max
 	}
 	return value
+}
+
+func truncateText(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if lipgloss.Width(value) <= width {
+		return value
+	}
+	if width == 1 {
+		return "…"
+	}
+
+	runes := []rune(value)
+	truncated := make([]rune, 0, len(runes))
+	for _, r := range runes {
+		next := string(append(truncated, r))
+		if lipgloss.Width(next+"…") > width {
+			break
+		}
+		truncated = append(truncated, r)
+	}
+	if len(truncated) == 0 {
+		return "…"
+	}
+	return string(truncated) + "…"
 }
 
 func (m model) accent(text string) string {
