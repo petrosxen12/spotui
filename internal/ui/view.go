@@ -103,13 +103,9 @@ func (m model) View() string {
 	m.resizeWithLayout(layout)
 
 	page := pageStyle.Copy().Padding(layout.pagePaddingY, layout.pagePaddingX)
-	playbar := playbarStyle.Width(layout.bodyWidth).Render(m.playbarView(layout))
+	playbar := m.playbarContainerStyle(layout).Width(layout.bodyWidth).Render(m.playbarView(layout))
 
-	dockStyleToUse := dockStyle
-	if m.inputFocused {
-		dockStyleToUse = dockFocusedStyle
-	}
-	dock := dockStyleToUse.Width(layout.bodyWidth).Render(m.commandDockView(layout))
+	dock := m.dockContainerStyle(layout).Width(layout.bodyWidth).Render(m.commandDockView(layout))
 
 	mainContent := strings.Join([]string{
 		m.resultsPanel(layout.mainWidth, layout),
@@ -129,6 +125,24 @@ func (m model) View() string {
 		mainContent,
 		dock,
 	}, "\n"))
+}
+
+func (m model) playbarContainerStyle(layout layoutMetrics) lipgloss.Style {
+	if layout.heightCompact {
+		return playbarStyle.Copy().MarginBottom(0)
+	}
+	return playbarStyle
+}
+
+func (m model) dockContainerStyle(layout layoutMetrics) lipgloss.Style {
+	style := dockStyle
+	if m.inputFocused {
+		style = dockFocusedStyle
+	}
+	if layout.heightCompact {
+		return style.Copy().MarginTop(0)
+	}
+	return style
 }
 
 func (m model) playbarView(layout layoutMetrics) string {

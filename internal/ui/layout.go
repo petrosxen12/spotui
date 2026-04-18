@@ -15,6 +15,7 @@ type layoutMetrics struct {
 	mainWidth           int
 	compact             bool
 	widthCompact        bool
+	heightCompact       bool
 	playbarCompact      bool
 	playbarProgressLen  int
 	listHeight          int
@@ -49,6 +50,9 @@ func (m model) layoutMetrics() layoutMetrics {
 	if m.width < 70 {
 		paddingX = 0
 	}
+	if m.height < 23 {
+		paddingY = 0
+	}
 
 	bodyWidth := m.width - (paddingX * 2)
 	if bodyWidth < 20 {
@@ -70,6 +74,7 @@ func (m model) layoutMetrics() layoutMetrics {
 
 	widthCompact := mainWidth < 72
 	compact := widthCompact || m.height < 26
+	heightCompact := m.height < 23
 	playbarCompact := mainWidth < 72
 
 	playbarProgressLen := clampInt(mainWidth/4, 12, 32)
@@ -81,6 +86,7 @@ func (m model) layoutMetrics() layoutMetrics {
 		mainWidth:           mainWidth,
 		compact:             compact,
 		widthCompact:        widthCompact,
+		heightCompact:       heightCompact,
 		playbarCompact:      playbarCompact,
 		playbarProgressLen:  playbarProgressLen,
 		inputWidth:          inputWidth,
@@ -92,18 +98,27 @@ func (m model) layoutMetrics() layoutMetrics {
 	}
 
 	pageVertical := paddingY * 2
-	playbarHeight := lipgloss.Height(playbarStyle.Width(bodyWidth).Render(m.playbarView(tempLayout)))
+	playbarHeight := lipgloss.Height(m.playbarContainerStyle(tempLayout).Width(bodyWidth).Render(m.playbarView(tempLayout)))
 	footerHeight := lipgloss.Height(m.footerPanel(bodyWidth, tempLayout))
-	dockHeight := lipgloss.Height(dockStyle.Width(bodyWidth).Render(m.commandDockView(tempLayout)))
+	dockHeight := lipgloss.Height(m.dockContainerStyle(tempLayout).Width(bodyWidth).Render(m.commandDockView(tempLayout)))
 	sectionGaps := 3
 	available := m.height - pageVertical - playbarHeight - footerHeight - dockHeight - sectionGaps
-	listHeight := clampInt(available, 6, maxInt(6, available))
+	minListHeight := 1
+	if m.height >= 24 {
+		minListHeight = 6
+	} else if m.height >= 20 {
+		minListHeight = 4
+	} else if m.height >= 16 {
+		minListHeight = 2
+	}
+	listHeight := clampInt(available, minListHeight, maxInt(minListHeight, available))
 
 	return layoutMetrics{
 		bodyWidth:           bodyWidth,
 		mainWidth:           mainWidth,
 		compact:             compact,
 		widthCompact:        widthCompact,
+		heightCompact:       heightCompact,
 		playbarCompact:      playbarCompact,
 		playbarProgressLen:  playbarProgressLen,
 		listHeight:          listHeight,
