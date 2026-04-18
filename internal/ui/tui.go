@@ -34,6 +34,9 @@ var (
 	heroStyle = lipgloss.NewStyle().
 			MarginBottom(1)
 
+	playbarStyle = lipgloss.NewStyle().
+			MarginBottom(1)
+
 	panelStyle = lipgloss.NewStyle().
 			Padding(0, 0)
 
@@ -243,8 +246,9 @@ type actionMsg struct {
 }
 
 type devicesMsg struct {
-	devices []app.Device
-	err     error
+	devices     []app.Device
+	err         error
+	pushHistory bool
 }
 
 type deviceSelectedMsg struct {
@@ -283,16 +287,28 @@ type model struct {
 	suggestionsOpen  bool
 	accentColor      string
 	accentColorCache map[string]string
+	viewHistory      []viewState
+}
+
+type viewState struct {
+	listItems     []list.Item
+	listMode      listMode
+	query         string
+	lastResults   app.Results
+	resultCount   int
+	inputValue    string
+	lastAction    string
+	lastActionErr bool
 }
 
 type layoutMetrics struct {
-	bodyWidth       int
-	compact         bool
-	heroProgressLen int
-	listHeight      int
-	inputWidth      int
-	pagePaddingX    int
-	pagePaddingY    int
+	bodyWidth          int
+	compact            bool
+	playbarProgressLen int
+	listHeight         int
+	inputWidth         int
+	pagePaddingX       int
+	pagePaddingY       int
 }
 
 func Run(service app.PlayerService) error {
@@ -359,6 +375,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.inputFocused {
 			switch msg.String() {
 			case "esc":
+				if m.suggestionsOpen {
+					m.closeSuggestions()
+					return m, nil
+				}
+				if m.popViewState() {
+					return m, nil
+				}
+				m.input.SetValue("")
 				m.closeSuggestions()
 				return m, nil
 			case "right", "ctrl+space", "ctrl+@":
@@ -376,6 +400,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "esc":
+			if m.popViewState() {
+				return m, nil
+			}
+			m.toggleFocus()
+			m.input.SetValue("")
+			return m, nil
 		case "enter":
 			switch selected := m.list.SelectedItem().(type) {
 			case resultItem:
@@ -413,6 +444,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastActionErr = true
 			return m, nil
 		}
+		m.pushViewState()
 		m.query = msg.query
 		m.lastResults = msg.results
 		m.listMode = listModeSearch
@@ -427,6 +459,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastAction = msg.err.Error()
 			m.lastActionErr = true
 			return m, nil
+		}
+		if msg.pushHistory {
+			m.pushViewState()
 		}
 		m.listMode = listModeDevices
 		m.list.SetItems(itemsFromDevices(msg.devices))
@@ -443,8 +478,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.lastAction = fmt.Sprintf("Selected device: %s", msg.device.Name)
 		m.lastActionErr = false
-		return m, fetchDevicesCmd(m.service)
+		return m, fetchDevicesCmd(m.service, false)
 	case helpMsg:
+		m.pushViewState()
 		m.listMode = listModeHelp
 		helpItems := make([]list.Item, 0, len(slashCommands))
 		for _, command := range slashCommands {
@@ -514,7 +550,7 @@ func (m model) View() string {
 	m.resizeWithLayout(layout)
 
 	page := pageStyle.Copy().Padding(layout.pagePaddingY, layout.pagePaddingX)
-	hero := heroStyle.Width(layout.bodyWidth).Render(m.heroView(layout))
+	playbar := playbarStyle.Width(layout.bodyWidth).Render(m.playbarView(layout))
 
 	dockStyleToUse := dockStyle
 	if m.inputFocused {
@@ -523,7 +559,7 @@ func (m model) View() string {
 	dock := dockStyleToUse.Width(layout.bodyWidth).Render(m.commandDockView(layout))
 
 	return page.Width(m.width).Render(strings.Join([]string{
-		hero,
+		playbar,
 		m.resultsPanel(layout.bodyWidth, layout),
 		m.footerPanel(layout.bodyWidth, layout),
 		dock,
@@ -557,9 +593,9 @@ func (m model) layoutMetrics() layoutMetrics {
 
 	compact := bodyWidth < 72 || m.height < 26
 
-	heroProgressLen := clampInt(bodyWidth/4, 12, 32)
+	playbarProgressLen := clampInt(bodyWidth/4, 12, 32)
 
-	listHeight := m.height - 10
+	listHeight := m.height - 9
 	if compact {
 		listHeight -= 2
 	}
@@ -568,13 +604,13 @@ func (m model) layoutMetrics() layoutMetrics {
 	inputWidth := maxInt(10, bodyWidth-2)
 
 	return layoutMetrics{
-		bodyWidth:       bodyWidth,
-		compact:         compact,
-		heroProgressLen: heroProgressLen,
-		listHeight:      listHeight,
-		inputWidth:      inputWidth,
-		pagePaddingX:    paddingX,
-		pagePaddingY:    paddingY,
+		bodyWidth:          bodyWidth,
+		compact:            compact,
+		playbarProgressLen: playbarProgressLen,
+		listHeight:         listHeight,
+		inputWidth:         inputWidth,
+		pagePaddingX:       paddingX,
+		pagePaddingY:       paddingY,
 	}
 }
 
@@ -620,7 +656,55 @@ func (m *model) refreshAccentColor() tea.Cmd {
 	return fetchAccentColorCmd(m.playback.AlbumArtURL)
 }
 
-func (m model) heroView(layout layoutMetrics) string {
+func (m *model) pushViewState() {
+	snapshot := viewState{
+		listItems:     append([]list.Item(nil), m.list.Items()...),
+		listMode:      m.listMode,
+		query:         m.query,
+		lastResults:   m.lastResults,
+		resultCount:   m.resultCount,
+		inputValue:    m.input.Value(),
+		lastAction:    m.lastAction,
+		lastActionErr: m.lastActionErr,
+	}
+	m.viewHistory = append(m.viewHistory, snapshot)
+}
+
+func (m *model) popViewState() bool {
+	if len(m.viewHistory) == 0 {
+		m.listMode = listModeSearch
+		m.query = ""
+		m.lastResults = app.Results{}
+		m.resultCount = 0
+		m.list.SetItems(nil)
+		m.list.Select(0)
+		m.input.SetValue("")
+		m.inputFocused = true
+		m.input.Focus()
+		m.closeSuggestions()
+		return false
+	}
+
+	idx := len(m.viewHistory) - 1
+	snapshot := m.viewHistory[idx]
+	m.viewHistory = m.viewHistory[:idx]
+
+	m.listMode = snapshot.listMode
+	m.query = snapshot.query
+	m.lastResults = snapshot.lastResults
+	m.resultCount = snapshot.resultCount
+	m.list.SetItems(snapshot.listItems)
+	m.list.Select(0)
+	m.input.SetValue(snapshot.inputValue)
+	m.lastAction = snapshot.lastAction
+	m.lastActionErr = snapshot.lastActionErr
+	m.inputFocused = true
+	m.input.Focus()
+	m.closeSuggestions()
+	return true
+}
+
+func (m model) playbarView(layout layoutMetrics) string {
 	status := "Idle"
 	if m.playback.Device.ID != "" && !m.playback.IsPlaying {
 		status = "Paused"
@@ -644,27 +728,33 @@ func (m model) heroView(layout layoutMetrics) string {
 		device = m.playback.Device.Name
 	}
 
-	progress := m.progressBar(layout.heroProgressLen)
+	progress := m.progressBar(layout.playbarProgressLen)
 	timing := formatDuration(m.playback.Progress) + " / " + formatDuration(m.playback.Duration)
 
-	meta := lipgloss.JoinHorizontal(
+	left := lipgloss.JoinHorizontal(
 		lipgloss.Left,
+		eyebrowStyle.Render("spotui"),
+		"  ",
 		m.playingStatusStyle().Render(strings.ToLower(status)),
+		"  ",
+		m.nowPlayingTitleStyle().Render(title),
+	)
+	right := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		subtitleStyle.Render(artist),
 		"  ·  ",
 		metaPillStyle.Render(device),
+		"  ",
+		kickerStyle.Render(progress+"  "+timing),
 	)
-
-	lines := []string{
-		eyebrowStyle.Render("spotui"),
-		m.nowPlayingTitleStyle().Render(title),
-		subtitleStyle.Render(artist),
-	}
 	if layout.compact {
-		lines = append(lines, meta, kickerStyle.Render(progress+"  "+timing))
-		return strings.Join(lines, "\n")
+		return strings.Join([]string{
+			left,
+			subtitleStyle.Render(artist),
+			kickerStyle.Render(progress + "  " + timing),
+		}, "\n")
 	}
-	lines = append(lines, meta, kickerStyle.Render(progress+"  "+timing))
-	return strings.Join(lines, "\n")
+	return heroStyle.Render(strings.Join([]string{left, right}, "\n"))
 }
 
 func (m model) resultsPanel(width int, layout layoutMetrics) string {
@@ -740,20 +830,14 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 
 func (m model) commandDockView(layout layoutMetrics) string {
 	inputView := inputShellStyle.Width(maxInt(10, layout.bodyWidth-4)).Render(m.input.View())
-	lines := []string{
-		eyebrowStyle.Render("Brew"),
-	}
+	lines := []string{}
 	if popup := m.suggestionsView(layout); popup != "" {
 		lines = append(lines, popup)
 	}
 	if layout.compact {
-		lines = append(lines, inputView, commandHintStyle.Render("/help /devices /play /pause"))
+		lines = append(lines, inputView)
 	} else {
-		lines = append(lines[:1], append([]string{
-			commandHintStyle.Render("Search, or use /help /devices /device /play /pause /resume /next /prev."),
-			"",
-			inputView,
-		}, lines[1:]...)...)
+		lines = append(lines, inputView)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -986,7 +1070,7 @@ func (m model) runSlashCommand(raw string) tea.Cmd {
 			return actionMsg{text: "Resumed playback", err: m.service.Resume(context.Background())}
 		}
 	case "devices":
-		return fetchDevicesCmd(m.service)
+		return fetchDevicesCmd(m.service, true)
 	case "device":
 		needle := strings.TrimSpace(arg)
 		if needle == "" {
@@ -1121,10 +1205,10 @@ func searchCmd(service app.PlayerService, query string) tea.Cmd {
 	}
 }
 
-func fetchDevicesCmd(service app.PlayerService) tea.Cmd {
+func fetchDevicesCmd(service app.PlayerService, pushHistory bool) tea.Cmd {
 	return func() tea.Msg {
 		devices, err := service.ListDevices(context.Background())
-		return devicesMsg{devices: devices, err: err}
+		return devicesMsg{devices: devices, err: err, pushHistory: pushHistory}
 	}
 }
 
