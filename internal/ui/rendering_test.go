@@ -11,6 +11,49 @@ import (
 	"github.com/petrosxen/spotui/internal/app"
 )
 
+func TestEffectiveAccentColorFallsBackToSpotifyGreen(t *testing.T) {
+	m := newModel(nil)
+
+	if got := m.effectiveAccentColor(); got != "#1DB954" {
+		t.Fatalf("effectiveAccentColor() = %q, want %q", got, "#1DB954")
+	}
+	if got := m.vividAccentColor(); got != "#1DB954" {
+		t.Fatalf("vividAccentColor() = %q, want %q", got, "#1DB954")
+	}
+}
+
+func TestDerivedAccentColorsSplitTextAndChrome(t *testing.T) {
+	m := newModel(nil)
+	m.accentColor = "#8c7a69"
+
+	if got := m.textAccentColor(); got == m.accentColor {
+		t.Fatalf("textAccentColor() = %q, want derived color different from base", got)
+	}
+	if got := m.vividAccentColor(); got == m.accentColor {
+		t.Fatalf("vividAccentColor() = %q, want boosted color different from base", got)
+	}
+	if m.textAccentColor() == m.vividAccentColor() {
+		t.Fatalf("expected text and vivid accent colors to differ, got %q", m.textAccentColor())
+	}
+}
+
+func TestRefreshAccentColorUsesCachedAlbumAccentWhilePaused(t *testing.T) {
+	m := newModel(nil)
+	m.playback = app.PlaybackState{
+		IsPlaying:   false,
+		AlbumArtURL: "https://example.com/cover.jpg",
+	}
+	m.accentColorCache[m.playback.AlbumArtURL] = "#abcdef"
+
+	cmd := m.refreshAccentColor()
+	if cmd != nil {
+		t.Fatal("refreshAccentColor() returned unexpected fetch command for cached art")
+	}
+	if got := m.accentColor; got != "#abcdef" {
+		t.Fatalf("accentColor = %q, want %q", got, "#abcdef")
+	}
+}
+
 func TestCompactPlaybarVeryNarrowWidthStaysBounded(t *testing.T) {
 	m := newModel(nil)
 	m.width = 34

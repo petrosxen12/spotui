@@ -28,11 +28,6 @@ var (
 	dockStyle = lipgloss.NewStyle().
 			MarginTop(1)
 
-	dockFocusedStyle = dockStyle.Copy().
-				BorderTop(true).
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#5E8F72", Dark: "#2A7E4F"})
-
 	eyebrowStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#66706B", Dark: "#8A948F"}).
 			Bold(true)
@@ -69,13 +64,6 @@ var (
 
 	inputShellStyle = lipgloss.NewStyle().
 			Padding(0, 0)
-
-	suggestionPopupStyle = lipgloss.NewStyle().
-				Padding(0, 0).
-				MarginBottom(1).
-				BorderLeft(true).
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#5E8F72", Dark: "#2A7E4F"})
 
 	suggestionSelectedStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#111513", Dark: "#F3F6F4"}).
@@ -152,7 +140,10 @@ func (m model) playbarContainerStyle(layout layoutMetrics) lipgloss.Style {
 func (m model) dockContainerStyle(layout layoutMetrics) lipgloss.Style {
 	style := dockStyle
 	if m.inputFocused {
-		style = dockFocusedStyle
+		style = dockStyle.Copy().
+			BorderTop(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color(m.vividAccentColor()))
 	}
 	if layout.heightCompact {
 		return style.Copy().MarginTop(0)
@@ -365,7 +356,7 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 	if m.lastActionErr {
 		statusTone = errorStyle
 	} else if currentAction != "" {
-		statusTone = successStyle
+		statusTone = successStyle.Copy().Foreground(lipgloss.Color(m.vividAccentColor()))
 	}
 
 	lines := []string{infoStyle.Render(truncateText(m.connectionStatus, width))}
@@ -475,7 +466,14 @@ func (m model) suggestionsView(layout layoutMetrics) string {
 			lines = append(lines, commandHintStyle.Render("  "+line))
 		}
 	}
-	return suggestionPopupStyle.Width(maxInt(20, layout.bodyWidth-4)).Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().
+		Padding(0, 0).
+		MarginBottom(1).
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color(m.vividAccentColor())).
+		Width(maxInt(20, layout.bodyWidth-4)).
+		Render(strings.Join(lines, "\n"))
 }
 
 func (m model) selectedContextLines(width int) []string {
