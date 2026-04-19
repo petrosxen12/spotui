@@ -10,7 +10,9 @@ import (
 )
 
 type stubPlayerService struct {
-	listDevices func(context.Context) ([]app.Device, error)
+	listDevices       func(context.Context) ([]app.Device, error)
+	localPlayerStatus app.LocalPlayerStatus
+	startLocalPlayer  func(context.Context) error
 }
 
 func (s stubPlayerService) CurrentUser(context.Context) (app.User, error) {
@@ -66,6 +68,25 @@ func (s stubPlayerService) SetDeviceByID(context.Context, string) error {
 
 func (s stubPlayerService) SetDeviceByName(context.Context, string) (app.Device, error) {
 	return app.Device{}, nil
+}
+
+func (s stubPlayerService) LocalPlayerStatus(context.Context) (app.LocalPlayerStatus, error) {
+	return s.localPlayerStatus, nil
+}
+
+func (s stubPlayerService) StartLocalPlayer(ctx context.Context) error {
+	if s.startLocalPlayer != nil {
+		return s.startLocalPlayer(ctx)
+	}
+	return nil
+}
+
+func (s stubPlayerService) StopLocalPlayer(context.Context) error {
+	return nil
+}
+
+func (s stubPlayerService) UseLocalPlayer(context.Context) error {
+	return nil
 }
 
 func TestBuildSuggestionsUsesCachedDevices(t *testing.T) {
@@ -182,6 +203,44 @@ func TestPlaySuggestionsUsesFuzzyTitleMatch(t *testing.T) {
 	}
 	if suggestions[0].insertValue != "/play One More Time" {
 		t.Fatalf("unexpected insert value %q", suggestions[0].insertValue)
+	}
+}
+
+func TestBuildSuggestionsIncludesLocalStartCommand(t *testing.T) {
+	m := newModel(stubPlayerService{})
+
+	suggestions := m.buildSuggestions("/loc")
+	if len(suggestions) == 0 {
+		t.Fatal("expected local command suggestion")
+	}
+	if suggestions[0].insertValue != "/local start" {
+		t.Fatalf("unexpected insert value %q", suggestions[0].insertValue)
+	}
+}
+
+func TestLocalStartCommandCallsService(t *testing.T) {
+	called := 0
+	m := newModel(stubPlayerService{
+		startLocalPlayer: func(context.Context) error {
+			called++
+			return nil
+		},
+	})
+
+	cmd := m.runSlashCommand("/local start")
+	if cmd == nil {
+		t.Fatal("expected start command")
+	}
+	msg := cmd()
+	action, ok := msg.(localPlayerActionMsg)
+	if !ok {
+		t.Fatalf("expected localPlayerActionMsg, got %T", msg)
+	}
+	if action.err != nil {
+		t.Fatalf("unexpected error: %v", action.err)
+	}
+	if called != 1 {
+		t.Fatalf("expected StartLocalPlayer to be called once, got %d", called)
 	}
 }
 

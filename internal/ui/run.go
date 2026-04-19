@@ -33,7 +33,7 @@ func newModel(service app.PlayerService) model {
 	results.DisableQuitKeybindings()
 
 	input := textinput.New()
-	input.Placeholder = "Search tracks, playlists, or enter /pause /resume /next /prev"
+	input.Placeholder = "Search tracks, playlists, or enter /pause /resume /next /prev /local start"
 	input.Prompt = "› "
 	input.Focus()
 	input.CharLimit = 256

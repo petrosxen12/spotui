@@ -63,9 +63,13 @@ func (m model) buildSuggestions(raw string) []suggestion {
 		matches := make([]suggestion, 0)
 		for _, candidate := range slashCommands {
 			if strings.HasPrefix(candidate.name, prefix) {
+				insertValue := candidate.name
+				if candidate.name == "/local" {
+					insertValue = candidate.usage
+				}
 				matches = append(matches, suggestion{
 					value:       candidate.name,
-					insertValue: candidate.name,
+					insertValue: insertValue,
 					description: candidate.description,
 				})
 			}

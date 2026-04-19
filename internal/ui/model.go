@@ -46,6 +46,7 @@ type model struct {
 	deviceCache      []app.Device
 	deviceCacheReady bool
 	deviceCacheBusy  bool
+	localPlayer      localPlayerStatus
 	viewHistory      []viewState
 	pollFailures     int
 	lastActionUntil  time.Time
@@ -67,6 +68,7 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		checkConnectionCmd(m.service),
 		fetchPlaybackCmd(m.service),
+		fetchLocalPlayerStatusCmd(m.service),
 	)
 }
 
@@ -236,7 +238,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pollEvery = nextPollInterval(msg.state)
 			m.clearBanner()
 			if cmd := m.refreshAccentColor(); cmd != nil {
-				return m, tea.Batch(pollPlaybackCmd(m.pollEvery), cmd)
+				return m, tea.Batch(pollPlaybackCmd(m.pollEvery), fetchLocalPlayerStatusCmd(m.service), cmd)
 			}
 		} else {
 			m.pollFailures++
@@ -244,7 +246,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showBannerForError(msg.err)
 			m.pollEvery = nextPollIntervalForError(msg.err, m.pollFailures)
 		}
-		return m, pollPlaybackCmd(m.pollEvery)
+		return m, tea.Batch(pollPlaybackCmd(m.pollEvery), fetchLocalPlayerStatusCmd(m.service))
+	case localPlayerStatusMsg:
+		if msg.err != nil {
+			return m, nil
+		}
+		m.localPlayer = msg.status
+		return m, nil
+	case localPlayerActionMsg:
+		if msg.err != nil {
+			m.setLastAction(msg.err.Error(), true)
+			m.showBannerForError(msg.err)
+			return m, fetchLocalPlayerStatusCmd(m.service)
+		}
+		actionCmd := m.setLastAction(msg.text, false)
+		m.clearBanner()
+		return m, tea.Batch(actionCmd, fetchPlaybackCmd(m.service), fetchLocalPlayerStatusCmd(m.service))
 	case accentColorMsg:
 		if msg.err != nil {
 			return m, nil

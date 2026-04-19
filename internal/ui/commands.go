@@ -20,6 +20,7 @@ type slashCommand struct {
 
 var slashCommands = []slashCommand{
 	{name: "/help", usage: "/help", description: "show command help"},
+	{name: "/local", usage: "/local start", description: "start the lightweight local player"},
 	{name: "/next", usage: "/next", description: "skip to the next item"},
 	{name: "/prev", usage: "/prev", description: "go back to the previous item"},
 	{name: "/pause", usage: "/pause", description: "pause playback"},
@@ -58,6 +59,12 @@ func (m model) runSlashCommand(raw string) tea.Cmd {
 	switch command {
 	case "help":
 		return func() tea.Msg { return helpMsg{} }
+	case "local":
+		action := strings.TrimSpace(arg)
+		if action != "start" {
+			return func() tea.Msg { return actionMsg{text: "Usage: /local start", err: nil} }
+		}
+		return startLocalPlayerCmd(m.service)
 	case "next":
 		return func() tea.Msg {
 			return actionMsg{text: "Skipped to next item", err: m.service.Next(context.Background())}

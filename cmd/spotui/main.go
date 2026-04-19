@@ -44,6 +44,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newResumeCmd())
 	rootCmd.AddCommand(newNextCmd())
 	rootCmd.AddCommand(newPrevCmd())
+	rootCmd.AddCommand(newLocalCmd())
 
 	return rootCmd
 }
@@ -314,6 +315,106 @@ func newPrevCmd() *cobra.Command {
 			})
 		},
 	}
+}
+
+func newLocalCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "local",
+		Short: "Manage the local spotifyd playback daemon",
+	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Show local-player status",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withService(cfg, func(service app.PlayerService) error {
+				status, err := service.LocalPlayerStatus(cmd.Context())
+				if err != nil {
+					return err
+				}
+				fmt.Printf("Enabled:\t%t\n", status.Enabled)
+				fmt.Printf("Binary available:\t%t\n", status.Binary.Available)
+				fmt.Printf("State:\t%s\n", status.Process.State)
+				if status.ConfiguredName != "" {
+					fmt.Printf("Configured device:\t%s\n", status.ConfiguredName)
+				}
+				if status.Device.Name != "" {
+					fmt.Printf("Spotify device:\t%s (%s)\n", status.Device.Name, status.Device.ID)
+				}
+				if status.LogPath != "" {
+					fmt.Printf("Log file:\t%s\n", status.LogPath)
+				}
+				if status.Message.Text != "" {
+					fmt.Printf("Message:\t%s\n", status.Message.Text)
+				}
+				return nil
+			})
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "start",
+		Short: "Start the managed local spotifyd player",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withService(cfg, func(service app.PlayerService) error {
+				if err := service.StartLocalPlayer(cmd.Context()); err != nil {
+					return err
+				}
+				fmt.Println("Local spotifyd player started and selected.")
+				return nil
+			})
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "stop",
+		Short: "Stop the managed local spotifyd player",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withService(cfg, func(service app.PlayerService) error {
+				if err := service.StopLocalPlayer(cmd.Context()); err != nil {
+					return err
+				}
+				fmt.Println("Local spotifyd player stopped.")
+				return nil
+			})
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "use",
+		Short: "Start and select the managed local spotifyd player",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withService(cfg, func(service app.PlayerService) error {
+				if err := service.UseLocalPlayer(cmd.Context()); err != nil {
+					return err
+				}
+				fmt.Println("Local spotifyd player selected.")
+				return nil
+			})
+		},
+	})
+
+	return cmd
 }
 
 func runUse(ctx context.Context, service app.PlayerService, needle string) error {

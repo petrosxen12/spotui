@@ -33,6 +33,62 @@ func TokenPath() (string, error) {
 	return filepath.Join(dir, "token.json"), nil
 }
 
+func RuntimeDir() (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "runtime"), nil
+}
+
+func SpotifydRuntimeDir() (string, error) {
+	dir, err := RuntimeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "spotifyd"), nil
+}
+
+func SpotifydConfigPath() (string, error) {
+	dir, err := SpotifydRuntimeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "spotifyd.conf"), nil
+}
+
+func SpotifydPIDPath() (string, error) {
+	dir, err := SpotifydRuntimeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "spotifyd.pid"), nil
+}
+
+func SpotifydLogPath() (string, error) {
+	dir, err := SpotifydRuntimeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "spotifyd.log"), nil
+}
+
+func SpotifydStatePath() (string, error) {
+	dir, err := SpotifydRuntimeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "spotifyd.state.json"), nil
+}
+
+func SpotifydCacheDir() (string, error) {
+	dir, err := SpotifydRuntimeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "cache"), nil
+}
+
 func WriteSecureFile(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create parent dir: %w", err)
