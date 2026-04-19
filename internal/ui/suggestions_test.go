@@ -185,17 +185,6 @@ func TestPlaySuggestionsUsesFuzzyTitleMatch(t *testing.T) {
 	}
 }
 
-func TestGhostCompletionUsesSelectedSuggestionSuffix(t *testing.T) {
-	m := newModel(stubPlayerService{})
-	m.input.SetValue("/de")
-	m.suggestionsOpen = true
-	m.suggestions = []suggestion{{insertValue: "/device", value: "/device"}}
-
-	if got := m.ghostCompletion(); got != "vice" {
-		t.Fatalf("ghostCompletion() = %q, want %q", got, "vice")
-	}
-}
-
 func TestPlaybackErrorShowsBannerAndBackoff(t *testing.T) {
 	m := newModel(stubPlayerService{})
 
@@ -212,5 +201,35 @@ func TestPlaybackErrorShowsBannerAndBackoff(t *testing.T) {
 	}
 	if nextModel.pollEvery < 5*time.Second {
 		t.Fatalf("pollEvery = %v, want backed off interval", nextModel.pollEvery)
+	}
+}
+
+func TestSuccessfulActionExpiresAfterTTL(t *testing.T) {
+	m := newModel(stubPlayerService{})
+	cmd := m.setLastAction("Resumed playback", false)
+	if cmd != nil {
+		t.Fatal("did not expect expiry command")
+	}
+	if m.lastAction != "Resumed playback" {
+		t.Fatalf("lastAction = %q", m.lastAction)
+	}
+	if m.currentLastAction() != "Resumed playback" {
+		t.Fatalf("currentLastAction() = %q", m.currentLastAction())
+	}
+	m.lastActionUntil = time.Now().Add(-time.Second)
+	if got := m.currentLastAction(); got != "" {
+		t.Fatalf("expected action to expire, got %q", got)
+	}
+}
+
+func TestNewerActionReplacesOlderAction(t *testing.T) {
+	m := newModel(stubPlayerService{})
+	first := m.setLastAction("First", false)
+	second := m.setLastAction("Second", false)
+	if first != nil || second != nil {
+		t.Fatal("did not expect expiry commands")
+	}
+	if m.currentLastAction() != "Second" {
+		t.Fatalf("expected newer action to remain, got %q", m.currentLastAction())
 	}
 }

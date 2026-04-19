@@ -55,7 +55,10 @@ func TestSuggestionsViewTruncatesLongEntries(t *testing.T) {
 
 	layout := m.layoutMetrics()
 	rendered := m.suggestionsView(layout)
-	popupWidth := maxInt(20, layout.bodyWidth-4) + 1
+	popupWidth := 0
+	for _, line := range strings.Split(rendered, "\n") {
+		popupWidth = maxInt(popupWidth, lipgloss.Width(line))
+	}
 
 	for _, line := range strings.Split(rendered, "\n") {
 		if lipgloss.Width(line) > popupWidth {

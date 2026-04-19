@@ -62,10 +62,7 @@ var (
 
 	bannerStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.AdaptiveColor{Light: "#8A3B2E", Dark: "#FF8A7A"})
-
-	ghostCompletionStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#909894", Dark: "#6D7571"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#C24934", Dark: "#FF9A87"})
 
 	commandHintStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#707874", Dark: "#838A87"})
@@ -363,10 +360,11 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 		return ""
 	}
 
+	currentAction := m.currentLastAction()
 	statusTone := infoStyle
 	if m.lastActionErr {
 		statusTone = errorStyle
-	} else if m.lastAction != "" {
+	} else if currentAction != "" {
 		statusTone = successStyle
 	}
 
@@ -378,13 +376,13 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 		}
 		lines = append(lines, tone.Render(truncateText(m.bannerText, width)))
 	}
-	if layout.footerShowStatus && m.lastAction != "" {
-		lines = append(lines, statusTone.Render(truncateText(m.lastAction, width)))
+	if layout.footerShowStatus && currentAction != "" {
+		lines = append(lines, statusTone.Render(truncateText(currentAction, width)))
 	}
 	if layout.footerShowHints {
 		lines = append(lines, commandHintStyle.Render(truncateText("tab focus  ·  enter play  ·  / commands  ·  q quit", width)))
 	}
-	return panelStyle.Width(width).Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
 }
 
 func (m model) contextRailView(layout layoutMetrics) string {
@@ -445,9 +443,6 @@ func (m model) contextRailView(layout layoutMetrics) string {
 
 func (m model) commandDockView(layout layoutMetrics) string {
 	inputLine := m.input.View()
-	if ghost := m.ghostCompletion(); ghost != "" {
-		inputLine += ghostCompletionStyle.Render(ghost)
-	}
 	inputView := inputShellStyle.Width(maxInt(10, layout.bodyWidth-4)).Render(inputLine)
 	lines := []string{}
 	if popup := m.suggestionsView(layout); popup != "" {
@@ -455,18 +450,6 @@ func (m model) commandDockView(layout layoutMetrics) string {
 	}
 	lines = append(lines, inputView)
 	return strings.Join(lines, "\n")
-}
-
-func (m model) ghostCompletion() string {
-	if !m.inputFocused || !m.suggestionsOpen || len(m.suggestions) == 0 {
-		return ""
-	}
-	current := m.input.Value()
-	insert := m.suggestions[m.suggestionIndex].insertValue
-	if current == "" || !strings.HasPrefix(insert, current) || insert == current {
-		return ""
-	}
-	return insert[len(current):]
 }
 
 func (m model) suggestionsView(layout layoutMetrics) string {

@@ -48,17 +48,19 @@ type model struct {
 	deviceCacheBusy  bool
 	viewHistory      []viewState
 	pollFailures     int
+	lastActionUntil  time.Time
 }
 
 type viewState struct {
-	listItems     []list.Item
-	listMode      listMode
-	query         string
-	lastResults   app.Results
-	resultCount   int
-	inputValue    string
-	lastAction    string
-	lastActionErr bool
+	listItems       []list.Item
+	listMode        listMode
+	query           string
+	lastResults     app.Results
+	resultCount     int
+	inputValue      string
+	lastAction      string
+	lastActionErr   bool
+	lastActionUntil time.Time
 }
 
 func (m model) Init() tea.Cmd {
@@ -160,8 +162,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case searchMsg:
 		if msg.err != nil {
-			m.lastAction = msg.err.Error()
-			m.lastActionErr = true
+			m.setLastAction(msg.err.Error(), true)
 			m.showBannerForError(msg.err)
 			return m, nil
 		}
@@ -172,15 +173,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetItems(itemsFromResults(msg.results))
 		m.list.Select(0)
 		m.resultCount = len(msg.results.Tracks) + len(msg.results.Playlists)
-		m.lastAction = fmt.Sprintf("Loaded %d results for %q", m.resultCount, msg.query)
-		m.lastActionErr = false
+		actionCmd := m.setLastAction(fmt.Sprintf("Loaded %d results for %q", m.resultCount, msg.query), false)
 		m.clearBanner()
-		return m, nil
+		return m, actionCmd
 	case devicesMsg:
 		m.deviceCacheBusy = false
 		if msg.err != nil {
-			m.lastAction = msg.err.Error()
-			m.lastActionErr = true
+			m.setLastAction(msg.err.Error(), true)
 			m.showBannerForError(msg.err)
 			return m, nil
 		}
@@ -192,21 +191,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetItems(itemsFromDevices(msg.devices))
 		m.list.Select(0)
 		m.resultCount = len(msg.devices)
-		m.lastAction = fmt.Sprintf("Loaded %d devices", len(msg.devices))
-		m.lastActionErr = false
+		actionCmd := m.setLastAction(fmt.Sprintf("Loaded %d devices", len(msg.devices)), false)
 		m.clearBanner()
-		return m, nil
+		return m, actionCmd
 	case deviceSelectedMsg:
 		if msg.err != nil {
-			m.lastAction = msg.err.Error()
-			m.lastActionErr = true
+			m.setLastAction(msg.err.Error(), true)
 			m.showBannerForError(msg.err)
 			return m, nil
 		}
-		m.lastAction = fmt.Sprintf("Selected device: %s", msg.device.Name)
-		m.lastActionErr = false
+		actionCmd := m.setLastAction(fmt.Sprintf("Selected device: %s", msg.device.Name), false)
 		m.clearBanner()
-		return m, fetchDevicesCmd(m.service, false)
+		return m, tea.Batch(fetchDevicesCmd(m.service, false), actionCmd)
 	case deviceCacheMsg:
 		m.deviceCacheBusy = false
 		if msg.err != nil {
@@ -230,10 +226,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetItems(helpItems)
 		m.list.Select(0)
 		m.resultCount = len(helpItems)
-		m.lastAction = "Command reference"
-		m.lastActionErr = false
+		actionCmd := m.setLastAction("Command reference", false)
 		m.clearBanner()
-		return m, nil
+		return m, actionCmd
 	case playbackMsg:
 		if msg.err == nil {
 			m.playback = msg.state
@@ -245,8 +240,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			m.pollFailures++
-			m.lastAction = msg.err.Error()
-			m.lastActionErr = true
+			m.setLastAction(msg.err.Error(), true)
 			m.showBannerForError(msg.err)
 			m.pollEvery = nextPollIntervalForError(msg.err, m.pollFailures)
 		}
@@ -264,15 +258,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case actionMsg:
 		if msg.err != nil {
-			m.lastAction = msg.err.Error()
-			m.lastActionErr = true
+			m.setLastAction(msg.err.Error(), true)
 			m.showBannerForError(msg.err)
 			return m, nil
 		}
-		m.lastAction = msg.text
-		m.lastActionErr = false
+		actionCmd := m.setLastAction(msg.text, false)
 		m.clearBanner()
-		return m, fetchPlaybackCmd(m.service)
+		return m, tea.Batch(fetchPlaybackCmd(m.service), actionCmd)
 	case pollTickMsg:
 		return m, fetchPlaybackCmd(m.service)
 	}
@@ -299,6 +291,27 @@ func (m *model) clearBanner() {
 	m.bannerIsError = false
 }
 
+func (m *model) setLastAction(text string, isErr bool) tea.Cmd {
+	m.lastAction = text
+	m.lastActionErr = isErr
+	if isErr || text == "" {
+		m.lastActionUntil = time.Time{}
+	} else {
+		m.lastActionUntil = time.Now().Add(5 * time.Second)
+	}
+	return nil
+}
+
+func (m model) currentLastAction() string {
+	if m.lastAction == "" {
+		return ""
+	}
+	if m.lastActionErr || m.lastActionUntil.IsZero() || time.Now().Before(m.lastActionUntil) {
+		return m.lastAction
+	}
+	return ""
+}
+
 func (m *model) toggleFocus() {
 	m.inputFocused = !m.inputFocused
 	if m.inputFocused {
@@ -319,13 +332,12 @@ func (m *model) submitInput() tea.Cmd {
 		return nil
 	}
 	m.input.SetValue("")
-	m.lastAction = fmt.Sprintf("Running %q...", value)
-	m.lastActionErr = false
+	actionCmd := m.setLastAction(fmt.Sprintf("Running %q...", value), false)
 	if strings.HasPrefix(value, "/") {
 		m.closeSuggestions()
-		return m.runSlashCommand(value)
+		return tea.Batch(actionCmd, m.runSlashCommand(value))
 	}
-	return searchCmd(m.service, value)
+	return tea.Batch(actionCmd, searchCmd(m.service, value))
 }
 
 func (m *model) storeDeviceCache(devices []app.Device) {
@@ -335,14 +347,15 @@ func (m *model) storeDeviceCache(devices []app.Device) {
 
 func (m *model) pushViewState() {
 	snapshot := viewState{
-		listItems:     append([]list.Item(nil), m.list.Items()...),
-		listMode:      m.listMode,
-		query:         m.query,
-		lastResults:   m.lastResults,
-		resultCount:   m.resultCount,
-		inputValue:    m.input.Value(),
-		lastAction:    m.lastAction,
-		lastActionErr: m.lastActionErr,
+		listItems:       append([]list.Item(nil), m.list.Items()...),
+		listMode:        m.listMode,
+		query:           m.query,
+		lastResults:     m.lastResults,
+		resultCount:     m.resultCount,
+		inputValue:      m.input.Value(),
+		lastAction:      m.lastAction,
+		lastActionErr:   m.lastActionErr,
+		lastActionUntil: m.lastActionUntil,
 	}
 	m.viewHistory = append(m.viewHistory, snapshot)
 }
@@ -375,6 +388,7 @@ func (m *model) popViewState() bool {
 	m.input.SetValue(snapshot.inputValue)
 	m.lastAction = snapshot.lastAction
 	m.lastActionErr = snapshot.lastActionErr
+	m.lastActionUntil = snapshot.lastActionUntil
 	m.inputFocused = true
 	m.input.Focus()
 	m.closeSuggestions()
