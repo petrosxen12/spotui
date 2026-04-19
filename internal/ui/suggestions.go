@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/petrosxen/spotui/internal/app"
+	"github.com/sahilm/fuzzy"
 )
 
 type suggestion struct {
@@ -76,19 +78,7 @@ func (m model) buildSuggestions(raw string) []suggestion {
 		if !m.deviceCacheReady {
 			return nil
 		}
-		prefix := strings.ToLower(strings.TrimSpace(arg))
-		matches := make([]suggestion, 0)
-		for _, device := range m.deviceCache {
-			name := device.Name
-			if prefix == "" || strings.HasPrefix(strings.ToLower(name), prefix) {
-				matches = append(matches, suggestion{
-					value:       name,
-					insertValue: "/device " + name,
-					description: strings.ToLower(device.Type),
-				})
-			}
-		}
-		return matches
+		return deviceSuggestions(m.deviceCache, strings.TrimSpace(arg))
 	case "play":
 		return m.playSuggestions(strings.TrimSpace(arg))
 	default:
@@ -120,17 +110,71 @@ func (m model) playSuggestions(prefix string) []suggestion {
 	if len(playables) == 0 {
 		return nil
 	}
-	prefix = strings.ToLower(prefix)
-	matches := make([]suggestion, 0)
-	for i, item := range playables {
-		label := fmt.Sprintf("%d. %s", i+1, item.title)
-		if prefix == "" || strings.HasPrefix(strings.ToLower(item.title), prefix) {
-			matches = append(matches, suggestion{
-				value:       label,
+	return playableSuggestions(playables, prefix)
+}
+
+func deviceSuggestions(devices []app.Device, prefix string) []suggestion {
+	if len(devices) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(prefix) == "" {
+		suggestions := make([]suggestion, 0, len(devices))
+		for _, device := range devices {
+			suggestions = append(suggestions, suggestion{
+				value:       device.Name,
+				insertValue: "/device " + device.Name,
+				description: strings.ToLower(device.Type),
+			})
+		}
+		return suggestions
+	}
+
+	targets := make([]string, 0, len(devices))
+	for _, device := range devices {
+		targets = append(targets, device.Name)
+	}
+	matches := fuzzy.Find(prefix, targets)
+	suggestions := make([]suggestion, 0, len(matches))
+	for _, match := range matches {
+		device := devices[match.Index]
+		suggestions = append(suggestions, suggestion{
+			value:       device.Name,
+			insertValue: "/device " + device.Name,
+			description: strings.ToLower(device.Type),
+		})
+	}
+	return suggestions
+}
+
+func playableSuggestions(playables []resultItem, prefix string) []suggestion {
+	if len(playables) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(prefix) == "" {
+		suggestions := make([]suggestion, 0, len(playables))
+		for i, item := range playables {
+			suggestions = append(suggestions, suggestion{
+				value:       fmt.Sprintf("%d. %s", i+1, item.title),
 				insertValue: "/play " + item.title,
 				description: item.kind,
 			})
 		}
+		return suggestions
 	}
-	return matches
+
+	targets := make([]string, 0, len(playables))
+	for _, item := range playables {
+		targets = append(targets, item.title)
+	}
+	matches := fuzzy.Find(prefix, targets)
+	suggestions := make([]suggestion, 0, len(matches))
+	for _, match := range matches {
+		item := playables[match.Index]
+		suggestions = append(suggestions, suggestion{
+			value:       fmt.Sprintf("%d. %s", match.Index+1, item.title),
+			insertValue: "/play " + item.title,
+			description: item.kind,
+		})
+	}
+	return suggestions
 }

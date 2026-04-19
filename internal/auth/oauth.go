@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/petrosxen/spotui/internal/config"
+	"github.com/petrosxen/spotui/internal/spoterr"
 )
 
 const (
@@ -112,7 +113,7 @@ func (m *Manager) ValidAccessToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if token.RefreshToken == "" && token.Expired() {
-		return "", errors.New("token expired and no refresh token is available; run `spotui login` again")
+		return "", spoterr.New(spoterr.KindAuthExpired, "token expired and no refresh token is available; run `spotui login` again")
 	}
 	if !token.ShouldRefresh() {
 		return token.AccessToken, nil
@@ -132,7 +133,7 @@ func (m *Manager) Refresh(ctx context.Context, token *Token) (*Token, error) {
 		return nil, errors.New("token is required")
 	}
 	if token.RefreshToken == "" {
-		return nil, errors.New("token refresh failed: refresh token missing; run `spotui login` again")
+		return nil, spoterr.New(spoterr.KindAuthExpired, "token refresh failed: refresh token missing; run `spotui login` again")
 	}
 
 	form := url.Values{

@@ -11,7 +11,9 @@ import (
 
 	"github.com/petrosxen/spotui/internal/auth"
 	"github.com/petrosxen/spotui/internal/config"
+	"github.com/petrosxen/spotui/internal/spoterr"
 	spotifyapi "github.com/petrosxen/spotui/internal/spotify"
+	"github.com/sahilm/fuzzy"
 )
 
 const playlistCacheTTL = 60 * time.Second
@@ -190,6 +192,9 @@ func (s *Service) GetPlaybackState(ctx context.Context) (PlaybackState, error) {
 		playback.NextItemName = queue.Queue[0].Name
 		playback.NextArtistName = strings.Join(artistNames(queue.Queue[0].Artists), ", ")
 	}
+	if playback.Device.ID != "" {
+		s.rememberLastDevice(playback.Device, false)
+	}
 
 	return playback, nil
 }
@@ -242,7 +247,8 @@ func (s *Service) SetDeviceByID(ctx context.Context, id string) error {
 	for _, device := range devices {
 		if device.ID == id {
 			s.cfg.PreferredDeviceID = id
-			return config.Save(s.cfg)
+			s.rememberLastDevice(device, true)
+			return nil
 		}
 	}
 
@@ -255,33 +261,41 @@ func (s *Service) SetDeviceByName(ctx context.Context, substring string) (Device
 		return Device{}, err
 	}
 
-	var matches []Device
-	for _, device := range devices {
-		if strings.Contains(strings.ToLower(device.Name), strings.ToLower(substring)) {
-			matches = append(matches, device)
-		}
+	match, err := bestDeviceMatch(devices, substring)
+	if err != nil {
+		return Device{}, err
 	}
 
-	switch len(matches) {
-	case 0:
-		return Device{}, fmt.Errorf("no device matched %q", substring)
-	case 1:
-		s.cfg.PreferredDeviceID = matches[0].ID
-		if err := config.Save(s.cfg); err != nil {
-			return Device{}, err
-		}
-		return matches[0], nil
-	default:
-		names := make([]string, 0, len(matches))
-		for _, match := range matches {
-			names = append(names, fmt.Sprintf("%s (%s)", match.Name, match.ID))
-		}
-		return Device{}, fmt.Errorf("multiple devices matched %q: %s", substring, strings.Join(names, ", "))
-	}
+	s.cfg.PreferredDeviceID = match.ID
+	s.rememberLastDevice(match, true)
+	return match, nil
 }
 
 func (s *Service) resolvePlaybackDevice(ctx context.Context) (string, error) {
-	return s.client.ResolvePlaybackDevice(ctx, s.cfg.PreferredDeviceID)
+	devices, err := s.ListDevices(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(devices) == 0 {
+		return "", spoterr.New(spoterr.KindNoActiveDevice, "no available Spotify devices; open Spotify on desktop, mobile, or web first")
+	}
+	if device, ok := findDeviceByID(devices, s.cfg.PreferredDeviceID); ok {
+		return device.ID, nil
+	}
+	if device, ok := findDeviceByID(devices, s.cfg.LastUsedDevice.ID); ok {
+		return device.ID, nil
+	}
+	if s.cfg.LastUsedDevice.Name != "" {
+		if device, err := bestDeviceMatch(devices, s.cfg.LastUsedDevice.Name); err == nil {
+			return device.ID, nil
+		}
+	}
+	for _, device := range devices {
+		if device.IsActive {
+			return device.ID, nil
+		}
+	}
+	return "", spoterr.New(spoterr.KindNoActiveDevice, "no active device found and no saved device is currently available; run `spotui use <name>` after starting Spotify on a device")
 }
 
 func (s *Service) resolveTrackRef(ref string) (string, error) {
@@ -408,4 +422,87 @@ func firstImageURL(images []spotifyapi.Image) string {
 		}
 	}
 	return ""
+}
+
+func (s *Service) rememberLastDevice(device Device, selected bool) {
+	if device.ID == "" {
+		return
+	}
+	s.cfg.LastUsedDevice = config.LastDevice{
+		ID:       device.ID,
+		Name:     device.Name,
+		Type:     device.Type,
+		SeenAt:   time.Now().UTC(),
+		Selected: selected,
+	}
+	_ = config.Save(s.cfg)
+}
+
+func findDeviceByID(devices []Device, id string) (Device, bool) {
+	if id == "" {
+		return Device{}, false
+	}
+	for _, device := range devices {
+		if device.ID == id {
+			return device, true
+		}
+	}
+	return Device{}, false
+}
+
+func bestDeviceMatch(devices []Device, needle string) (Device, error) {
+	needle = strings.TrimSpace(needle)
+	if needle == "" {
+		return Device{}, fmt.Errorf("device name is required")
+	}
+
+	lowerNeedle := strings.ToLower(needle)
+	exact := make([]Device, 0, 1)
+	substrings := make([]Device, 0)
+	for _, device := range devices {
+		lowerName := strings.ToLower(device.Name)
+		switch {
+		case lowerName == lowerNeedle:
+			exact = append(exact, device)
+		case strings.Contains(lowerName, lowerNeedle):
+			substrings = append(substrings, device)
+		}
+	}
+
+	if len(exact) == 1 {
+		return exact[0], nil
+	}
+	if len(exact) > 1 {
+		return Device{}, fmt.Errorf("multiple devices matched %q: %s", needle, joinDeviceNames(exact))
+	}
+	if len(substrings) == 1 {
+		return substrings[0], nil
+	}
+	if len(substrings) > 1 {
+		return Device{}, fmt.Errorf("multiple devices matched %q: %s", needle, joinDeviceNames(substrings))
+	}
+
+	targets := make([]string, 0, len(devices))
+	for _, device := range devices {
+		targets = append(targets, device.Name)
+	}
+	matches := fuzzy.Find(needle, targets)
+	if len(matches) == 0 {
+		return Device{}, fmt.Errorf("no device matched %q", needle)
+	}
+	if len(matches) > 1 && matches[0].Score == matches[1].Score {
+		return Device{}, fmt.Errorf("multiple devices matched %q: %s", needle, joinDeviceNames([]Device{
+			devices[matches[0].Index],
+			devices[matches[1].Index],
+		}))
+	}
+	return devices[matches[0].Index], nil
+}
+
+func joinDeviceNames(devices []Device) string {
+	names := make([]string, 0, len(devices))
+	for _, device := range devices {
+		names = append(names, fmt.Sprintf("%s (%s)", device.Name, device.ID))
+	}
+	return strings.Join(names, ", ")
 }

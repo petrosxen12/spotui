@@ -60,6 +60,13 @@ var (
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#8A3B2E", Dark: "#FF8A7A"})
 
+	bannerStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.AdaptiveColor{Light: "#8A3B2E", Dark: "#FF8A7A"})
+
+	ghostCompletionStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#909894", Dark: "#6D7571"})
+
 	commandHintStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#707874", Dark: "#838A87"})
 
@@ -364,6 +371,13 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 	}
 
 	lines := []string{infoStyle.Render(truncateText(m.connectionStatus, width))}
+	if m.bannerText != "" {
+		tone := commandHintStyle
+		if m.bannerIsError {
+			tone = bannerStyle
+		}
+		lines = append(lines, tone.Render(truncateText(m.bannerText, width)))
+	}
 	if layout.footerShowStatus && m.lastAction != "" {
 		lines = append(lines, statusTone.Render(truncateText(m.lastAction, width)))
 	}
@@ -430,13 +444,29 @@ func (m model) contextRailView(layout layoutMetrics) string {
 }
 
 func (m model) commandDockView(layout layoutMetrics) string {
-	inputView := inputShellStyle.Width(maxInt(10, layout.bodyWidth-4)).Render(m.input.View())
+	inputLine := m.input.View()
+	if ghost := m.ghostCompletion(); ghost != "" {
+		inputLine += ghostCompletionStyle.Render(ghost)
+	}
+	inputView := inputShellStyle.Width(maxInt(10, layout.bodyWidth-4)).Render(inputLine)
 	lines := []string{}
 	if popup := m.suggestionsView(layout); popup != "" {
 		lines = append(lines, popup)
 	}
 	lines = append(lines, inputView)
 	return strings.Join(lines, "\n")
+}
+
+func (m model) ghostCompletion() string {
+	if !m.inputFocused || !m.suggestionsOpen || len(m.suggestions) == 0 {
+		return ""
+	}
+	current := m.input.Value()
+	insert := m.suggestions[m.suggestionIndex].insertValue
+	if current == "" || !strings.HasPrefix(insert, current) || insert == current {
+		return ""
+	}
+	return insert[len(current):]
 }
 
 func (m model) suggestionsView(layout layoutMetrics) string {

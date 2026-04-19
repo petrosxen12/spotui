@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/petrosxen/spotui/internal/app"
+	"github.com/sahilm/fuzzy"
 )
 
 type slashCommand struct {
@@ -122,21 +123,42 @@ func (m model) resolvePlayable(ref string) (resultItem, error) {
 		return playables[idx-1], nil
 	}
 
-	ref = strings.ToLower(strings.TrimSpace(ref))
-	matches := make([]resultItem, 0)
+	ref = strings.TrimSpace(ref)
+	lowerRef := strings.ToLower(ref)
+	exact := make([]resultItem, 0, 1)
+	substrings := make([]resultItem, 0)
 	for _, item := range playables {
-		if strings.Contains(strings.ToLower(item.title), ref) {
-			matches = append(matches, item)
+		lowerTitle := strings.ToLower(item.title)
+		switch {
+		case lowerTitle == lowerRef:
+			exact = append(exact, item)
+		case strings.Contains(lowerTitle, lowerRef):
+			substrings = append(substrings, item)
 		}
 	}
-	switch len(matches) {
-	case 0:
-		return resultItem{}, fmt.Errorf("no search result matched %q", ref)
-	case 1:
-		return matches[0], nil
-	default:
+	switch {
+	case len(exact) == 1:
+		return exact[0], nil
+	case len(exact) > 1:
+		return resultItem{}, fmt.Errorf("multiple search results matched %q; use /play <index>", ref)
+	case len(substrings) == 1:
+		return substrings[0], nil
+	case len(substrings) > 1:
 		return resultItem{}, fmt.Errorf("multiple search results matched %q; use /play <index>", ref)
 	}
+
+	targets := make([]string, 0, len(playables))
+	for _, item := range playables {
+		targets = append(targets, item.title)
+	}
+	matches := fuzzy.Find(ref, targets)
+	if len(matches) == 0 {
+		return resultItem{}, fmt.Errorf("no search result matched %q", ref)
+	}
+	if len(matches) > 1 && matches[0].Score == matches[1].Score {
+		return resultItem{}, fmt.Errorf("multiple search results matched %q; use /play <index>", ref)
+	}
+	return playables[matches[0].Index], nil
 }
 
 func (m model) lastPlayableItems() []resultItem {

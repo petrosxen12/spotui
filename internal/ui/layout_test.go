@@ -3,9 +3,11 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/petrosxen/spotui/internal/app"
+	"github.com/petrosxen/spotui/internal/spoterr"
 )
 
 func TestClassifyHeightMode(t *testing.T) {
@@ -157,5 +159,15 @@ func TestWideCompactHeightDisablesRailWhenContextWouldOverflow(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "spotui") {
 		t.Fatal("expected playbar to remain visible in rendered view")
+	}
+}
+
+func TestNextPollIntervalForErrorBacksOffAndCaps(t *testing.T) {
+	rateLimited := spoterr.WithRetryAfter(spoterr.New(spoterr.KindRateLimited, "rate limited"), 7*time.Second)
+	if got := nextPollIntervalForError(rateLimited, 1); got != 7*time.Second {
+		t.Fatalf("first interval = %v, want %v", got, 7*time.Second)
+	}
+	if got := nextPollIntervalForError(rateLimited, 4); got != 30*time.Second {
+		t.Fatalf("capped interval = %v, want %v", got, 30*time.Second)
 	}
 }

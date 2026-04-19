@@ -1,50 +1,133 @@
 # spotui
 
-`spotui` is a Spotify controller with both a CLI and a minimal Bubble Tea TUI. It authenticates with Spotify using Authorization Code with PKCE, stores tokens locally, searches tracks and playlists, lists devices, selects a preferred device, and sends playback commands through the Spotify Web API.
+Terminal Spotify controller with a CLI and Bubble Tea TUI.
 
-## Build
+## Screenshots
 
-Requirements:
+![spotui TUI overview](./docs/screenshots/tui-overview.png)
+![spotui command mode](./docs/screenshots/tui-commands.png)
+
+## Features
+
+- CLI and TUI in one binary
+- Spotify Authorization Code with PKCE
+- Search tracks and playlists
+- Device listing and preferred-device selection
+- Fuzzy matching for `/device` and `/play`
+- Inline autocomplete and ghost completion
+- Polling backoff for no-device, network, and rate-limit states
+- Clear error messages for auth expiry, Premium requirements, and connectivity issues
+
+## Requirements
 
 - Go 1.24.2+
-- A Spotify Premium account for playback control commands
-- A Spotify app client ID from the Spotify developer dashboard
+- Spotify app client ID
+- Spotify Premium for playback control
 
-Build the CLI:
+## Quick Start
 
-```bash
-go build -o spotui ./cmd/spotui
-```
-
-Or with `Task`:
-
-```bash
-task build
-```
-
-The TUI is launched explicitly with `spotui tui`. This keeps existing CLI behavior unchanged for scripts and shell history instead of silently changing the default mode.
-
-## Spotify App Setup
-
-1. Open the Spotify Developer Dashboard: <https://developer.spotify.com/dashboard>
-2. Create an app.
-3. Copy the app's Client ID.
-4. In the app settings, add this redirect URI:
+1. Create a Spotify app at <https://developer.spotify.com/dashboard>
+2. Add this redirect URI:
 
 ```text
 http://127.0.0.1:8888/callback
 ```
 
-5. Save the settings.
+3. Export your client ID:
 
-You can keep the default redirect URI above, or pass a different one to `spotui login --redirect-uri ...` as long as it points to `127.0.0.1` or `localhost` and is also registered in the Spotify app settings.
+```bash
+export SPOTUI_CLIENT_ID=your_spotify_client_id
+```
 
-## Configuration
+4. Build and log in:
 
-Config files are stored in `~/.config/spotui/`:
+```bash
+go build -o spotui ./cmd/spotui
+./spotui login --client-id "$SPOTUI_CLIENT_ID"
+./spotui tui
+```
 
-- `config.json`: client ID, redirect URI, preferred device, and last search cache
-- `token.json`: access and refresh tokens, written with file mode `0600`
+## Install
+
+```bash
+go build -o spotui ./cmd/spotui
+```
+
+Or:
+
+```bash
+task build
+```
+
+## Usage
+
+```bash
+spotui login --client-id "$SPOTUI_CLIENT_ID"
+spotui me
+spotui devices
+spotui use kitchen
+spotui search "daft punk"
+spotui tui
+spotui pause
+spotui resume
+spotui next
+spotui prev
+```
+
+### Play Commands
+
+`spotui play` accepts:
+
+- a Spotify ID
+- a Spotify URI
+- an index from the most recent `spotui search`
+
+```bash
+spotui play track 11dFghVXANMlKmJXsNCbNl
+spotui play track spotify:track:11dFghVXANMlKmJXsNCbNl
+spotui play track 3
+
+spotui play playlist 37i9dQZF1DXcBWIGoYBM5M
+spotui play playlist spotify:playlist:37i9dQZF1DXcBWIGoYBM5M
+spotui play playlist 1
+```
+
+## TUI
+
+### Keys
+
+- `Enter`: search or confirm selection
+- `Tab`: cycle suggestions or switch focus
+- `Up` / `Down`: move through the list
+- `Right` or `Ctrl+Space`: accept suggestion
+- `Esc`: dismiss autocomplete
+- `q` or `Ctrl+C`: quit
+
+### Slash Commands
+
+- `/help`
+- `/next`
+- `/prev`
+- `/pause`
+- `/resume`
+- `/devices`
+- `/device <name>`
+- `/play <query|index>`
+- `/quit`
+
+### Autocomplete
+
+- Suggestions appear for `/` commands
+- Best match is shown inline as ghost completion
+- `/device` uses known Spotify devices
+- `/play` uses the latest TUI search results
+
+## Config
+
+Stored in `~/.config/spotui/`:
+
+- `config.json`: client ID, redirect URI, preferred device, last-used device, last search cache
+- `token.json`: Spotify access and refresh tokens
 
 Environment variables:
 
@@ -53,136 +136,54 @@ export SPOTUI_CLIENT_ID=your_spotify_client_id
 export SPOTUI_REDIRECT_URI=http://127.0.0.1:8888/callback
 ```
 
-## Commands
+### Token Storage
 
-Authenticate:
+- Config dir mode `0700`
+- Token file mode `0600`
+- Atomic temp-file-and-rename writes
+
+## Notes
+
+- Playback polling is adaptive
+- Active playback refreshes about every 1.5s
+- Paused playback backs off to about 4s
+- Repeated failures back off up to 30s
+- Spotify `429` respects `Retry-After`
+
+## Troubleshooting
+
+### No active device
+
+Start Spotify on a desktop, mobile, or web player, then run `spotui devices` or use `/devices`.
+
+### Login expired
 
 ```bash
 spotui login --client-id "$SPOTUI_CLIENT_ID"
 ```
 
-Inspect the authenticated account:
+### Premium required
 
-```bash
-spotui me
-```
+Playback control requires Spotify Premium.
 
-List devices:
+### Rate limited
 
-```bash
-spotui devices
-```
+`spotui` backs off automatically on `429`.
 
-Set the preferred device by substring match:
+### Network failure
 
-```bash
-spotui use kitchen
-```
+Check connectivity, VPN or proxy settings, and Spotify API reachability.
 
-Search tracks and playlists:
-
-```bash
-spotui search "daft punk"
-```
-
-Launch the TUI:
-
-```bash
-spotui tui
-```
-
-For `spotui play`, the final argument can be one of:
-
-- a raw Spotify ID
-- a full Spotify URI
-- a numeric index from the most recent `spotui search` results for that same item type
-
-Track forms:
+## Example
 
 ```text
-spotui play track <spotify-track-id>
-spotui play track <spotify-track-uri>
-spotui play track <last-search-track-index>
-```
-
-Track examples:
-
-```bash
-spotui play track 11dFghVXANMlKmJXsNCbNl
-spotui play track spotify:track:11dFghVXANMlKmJXsNCbNl
-spotui play track 3
-```
-
-Playlist forms:
-
-```text
-spotui play playlist <spotify-playlist-id>
-spotui play playlist <spotify-playlist-uri>
-spotui play playlist <last-search-playlist-index>
-```
-
-Playlist examples:
-
-```bash
-spotui play playlist 37i9dQZF1DXcBWIGoYBM5M
-spotui play playlist spotify:playlist:37i9dQZF1DXcBWIGoYBM5M
-spotui play playlist 1
-```
-
-Playback controls:
-
-```bash
-spotui pause
-spotui resume
-spotui next
-spotui prev
-```
-
-## TUI Keybindings
-
-- `Enter` in the input box: search for the current query
-- `Tab`: cycle slash-command suggestions when the popup is open, otherwise switch focus between the query input and results list
-- `Enter` on a selected result: play the selected track or playlist
-- `Enter` on a selected device: set that device as the preferred playback device
-- `Up` / `Down`: move through search results when the list is focused
-- `Right` or `Ctrl+Space`: accept the current autocomplete suggestion
-- `Esc`: dismiss the autocomplete popup
-- `q` or `Ctrl+C`: quit the TUI
-
-## TUI Slash Commands
-
-- `/help`: show command help in the list area
-- `/next`: skip to the next item
-- `/prev`: return to the previous item
-- `/pause`: pause playback
-- `/resume`: resume playback
-- `/devices`: show Spotify devices in the list area
-- `/device <name>`: select a device by name substring
-- `/play <query|index>`: play from the last search results by fuzzy name match or 1-based index
-- `/quit`: quit the TUI
-
-## TUI Autocomplete
-
-- When the input starts with `/` and you are typing a command name, the prompt shows matching slash commands in a small popup above the input.
-- `Tab` cycles the popup suggestions.
-- `Right` or `Ctrl+Space` accepts the highlighted suggestion into the prompt.
-- `Enter` executes an exact slash command, or accepts the highlighted command suggestion first if the command name is still incomplete.
-- After `/device `, autocomplete suggests available Spotify device names.
-- After `/play `, autocomplete suggests tracks and playlists from the most recent TUI search results.
-- `Esc` closes the popup without clearing the prompt.
-
-## Example Output
-
-`spotui devices`:
-
-```text
+$ spotui devices
 74c1c2f4b9d9f55f9f3d2f6a9d4c2b1e4f5a6789	MacBook Pro Speakers	Computer	active
 98f18ab7b6f21d0013a987c5fe5a0a3ff0bcb123	Kitchen Nest Hub	Speaker	inactive
 ```
 
-`spotui search "daft punk"`:
-
 ```text
+$ spotui search "daft punk"
 Tracks for "daft punk":
   [1] spotify:track:2cGxRwrMyEAp8dEbuZaVv6 | 2cGxRwrMyEAp8dEbuZaVv6 | One More Time
   [2] spotify:track:0DiWol3AO6WpXZgp0goxAV | 0DiWol3AO6WpXZgp0goxAV | Get Lucky
@@ -191,18 +192,8 @@ Playlists for "daft punk":
   [2] spotify:playlist:3C4j8T2L8s3vk0S2lQkR4n | 3C4j8T2L8s3vk0S2lQkR4n | Daft Punk Radio
 ```
 
-In the examples above, `spotui play track 3` means "play the third track from the most recent search results", while `spotui play playlist 1` means "play the first playlist from the most recent search results".
+## Development
 
-## Polling Notes
-
-- The TUI does not poll Spotify at a fixed aggressive rate.
-- When playback is active, it refreshes roughly every 1.5 seconds so the status bar stays current.
-- When playback is paused, polling backs off to every 4 seconds.
-- When no active device is available, polling backs off further to every 6 seconds.
-- Search requests only happen when you submit a query, and playlist caching from the Phase 2 service layer remains in place for 60 seconds.
-
-## Notes
-
-- Playback commands require Spotify Premium. Spotify typically returns HTTP 403 otherwise.
-- If no active or preferred device exists, playback commands fail with a clear error instead of guessing.
-- The TUI status bar shows the current device, playback state, track, artist, and a small progress indicator when Spotify reports duration data.
+```bash
+go test ./...
+```

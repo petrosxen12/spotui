@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -19,7 +18,16 @@ type Config struct {
 	ClientID          string     `json:"client_id"`
 	RedirectURI       string     `json:"redirect_uri"`
 	PreferredDeviceID string     `json:"preferred_device_id"`
+	LastUsedDevice    LastDevice `json:"last_used_device"`
 	LastSearch        LastSearch `json:"last_search"`
+}
+
+type LastDevice struct {
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Type     string    `json:"type"`
+	SeenAt   time.Time `json:"seen_at"`
+	Selected bool      `json:"selected"`
 }
 
 type LastSearch struct {
@@ -72,18 +80,18 @@ func Load() (*Config, error) {
 }
 
 func Save(cfg *Config) error {
+	if cfg == nil {
+		return errors.New("config is required")
+	}
 	path, err := ConfigPath()
 	if err != nil {
 		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode config: %w", err)
 	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+	if err := WriteSecureFile(path, append(data, '\n')); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil

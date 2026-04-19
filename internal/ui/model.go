@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/petrosxen/spotui/internal/app"
+	"github.com/petrosxen/spotui/internal/spoterr"
 )
 
 type listMode string
@@ -27,6 +28,8 @@ type model struct {
 	height           int
 	inputFocused     bool
 	connectionStatus string
+	bannerText       string
+	bannerIsError    bool
 	lastAction       string
 	lastActionErr    bool
 	query            string
@@ -44,6 +47,7 @@ type model struct {
 	deviceCacheReady bool
 	deviceCacheBusy  bool
 	viewHistory      []viewState
+	pollFailures     int
 }
 
 type viewState struct {
@@ -144,6 +148,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case connectionMsg:
 		if msg.err != nil {
 			m.connectionStatus = msg.err.Error()
+			m.showBannerForError(msg.err)
 			return m, nil
 		}
 		if msg.user.DisplayName != "" {
@@ -151,11 +156,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.connectionStatus = fmt.Sprintf("Connected as %s", msg.user.ID)
 		}
+		m.clearBanner()
 		return m, nil
 	case searchMsg:
 		if msg.err != nil {
 			m.lastAction = msg.err.Error()
 			m.lastActionErr = true
+			m.showBannerForError(msg.err)
 			return m, nil
 		}
 		m.pushViewState()
@@ -167,12 +174,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resultCount = len(msg.results.Tracks) + len(msg.results.Playlists)
 		m.lastAction = fmt.Sprintf("Loaded %d results for %q", m.resultCount, msg.query)
 		m.lastActionErr = false
+		m.clearBanner()
 		return m, nil
 	case devicesMsg:
 		m.deviceCacheBusy = false
 		if msg.err != nil {
 			m.lastAction = msg.err.Error()
 			m.lastActionErr = true
+			m.showBannerForError(msg.err)
 			return m, nil
 		}
 		m.storeDeviceCache(msg.devices)
@@ -185,15 +194,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resultCount = len(msg.devices)
 		m.lastAction = fmt.Sprintf("Loaded %d devices", len(msg.devices))
 		m.lastActionErr = false
+		m.clearBanner()
 		return m, nil
 	case deviceSelectedMsg:
 		if msg.err != nil {
 			m.lastAction = msg.err.Error()
 			m.lastActionErr = true
+			m.showBannerForError(msg.err)
 			return m, nil
 		}
 		m.lastAction = fmt.Sprintf("Selected device: %s", msg.device.Name)
 		m.lastActionErr = false
+		m.clearBanner()
 		return m, fetchDevicesCmd(m.service, false)
 	case deviceCacheMsg:
 		m.deviceCacheBusy = false
@@ -220,18 +232,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resultCount = len(helpItems)
 		m.lastAction = "Command reference"
 		m.lastActionErr = false
+		m.clearBanner()
 		return m, nil
 	case playbackMsg:
 		if msg.err == nil {
 			m.playback = msg.state
+			m.pollFailures = 0
 			m.pollEvery = nextPollInterval(msg.state)
+			m.clearBanner()
 			if cmd := m.refreshAccentColor(); cmd != nil {
 				return m, tea.Batch(pollPlaybackCmd(m.pollEvery), cmd)
 			}
 		} else {
+			m.pollFailures++
 			m.lastAction = msg.err.Error()
 			m.lastActionErr = true
-			m.pollEvery = playbackPollIdle
+			m.showBannerForError(msg.err)
+			m.pollEvery = nextPollIntervalForError(msg.err, m.pollFailures)
 		}
 		return m, pollPlaybackCmd(m.pollEvery)
 	case accentColorMsg:
@@ -249,10 +266,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.lastAction = msg.err.Error()
 			m.lastActionErr = true
+			m.showBannerForError(msg.err)
 			return m, nil
 		}
 		m.lastAction = msg.text
 		m.lastActionErr = false
+		m.clearBanner()
 		return m, fetchPlaybackCmd(m.service)
 	case pollTickMsg:
 		return m, fetchPlaybackCmd(m.service)
@@ -265,6 +284,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list, cmd = m.list.Update(msg)
 	}
 	return m, cmd
+}
+
+func (m *model) showBannerForError(err error) {
+	if err == nil {
+		return
+	}
+	m.bannerText = spoterr.BannerMessage(err)
+	m.bannerIsError = true
+}
+
+func (m *model) clearBanner() {
+	m.bannerText = ""
+	m.bannerIsError = false
 }
 
 func (m *model) toggleFocus() {

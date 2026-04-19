@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/petrosxen/spotui/internal/app"
+	"github.com/petrosxen/spotui/internal/spoterr"
 )
 
 type layoutMetrics struct {
@@ -282,6 +283,30 @@ func nextPollInterval(state app.PlaybackState) time.Duration {
 	return playbackPollActive
 }
 
+func nextPollIntervalForError(err error, failures int) time.Duration {
+	base := playbackPollIdle
+	switch spoterr.KindOf(err) {
+	case spoterr.KindNoActiveDevice:
+		base = playbackPollNoDevice
+	case spoterr.KindRateLimited:
+		base = 5 * time.Second
+	case spoterr.KindNetworkFailure:
+		base = 3 * time.Second
+	case spoterr.KindAuthExpired:
+		base = 10 * time.Second
+	}
+
+	if retryAfter := spoterr.RetryAfter(err); retryAfter > base {
+		base = retryAfter
+	}
+
+	if failures < 1 {
+		failures = 1
+	}
+	backoff := base * time.Duration(1<<minInt(failures-1, 3))
+	return minDuration(backoff, 30*time.Second)
+}
+
 func maxInt(a, b int) int {
 	if a > b {
 		return a
@@ -304,6 +329,13 @@ func clampInt(value, min, max int) int {
 		return max
 	}
 	return value
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func truncateText(value string, width int) string {

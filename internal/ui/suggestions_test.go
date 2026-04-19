@@ -3,8 +3,10 @@ package ui
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/petrosxen/spotui/internal/app"
+	"github.com/petrosxen/spotui/internal/spoterr"
 )
 
 type stubPlayerService struct {
@@ -147,5 +149,68 @@ func TestDeviceCacheMsgRebuildsSuggestionsFromCache(t *testing.T) {
 	}
 	if nextModel.suggestions[0].insertValue != "/device Kitchen Speaker" {
 		t.Fatalf("unexpected insert value %q", nextModel.suggestions[0].insertValue)
+	}
+}
+
+func TestBuildSuggestionsUsesFuzzyDeviceMatch(t *testing.T) {
+	m := model{
+		deviceCache: []app.Device{
+			{Name: "Kitchen Speaker", Type: "Speaker"},
+			{Name: "Desk Headphones", Type: "Computer"},
+		},
+		deviceCacheReady: true,
+	}
+
+	suggestions := m.buildSuggestions("/device kithn")
+	if len(suggestions) == 0 {
+		t.Fatal("expected fuzzy device suggestion")
+	}
+	if suggestions[0].insertValue != "/device Kitchen Speaker" {
+		t.Fatalf("unexpected insert value %q", suggestions[0].insertValue)
+	}
+}
+
+func TestPlaySuggestionsUsesFuzzyTitleMatch(t *testing.T) {
+	m := newModel(stubPlayerService{})
+	m.lastResults = app.Results{
+		Tracks: []app.SearchItem{{Name: "One More Time", URI: "spotify:track:1"}},
+	}
+
+	suggestions := m.buildSuggestions("/play onemr")
+	if len(suggestions) == 0 {
+		t.Fatal("expected fuzzy play suggestion")
+	}
+	if suggestions[0].insertValue != "/play One More Time" {
+		t.Fatalf("unexpected insert value %q", suggestions[0].insertValue)
+	}
+}
+
+func TestGhostCompletionUsesSelectedSuggestionSuffix(t *testing.T) {
+	m := newModel(stubPlayerService{})
+	m.input.SetValue("/de")
+	m.suggestionsOpen = true
+	m.suggestions = []suggestion{{insertValue: "/device", value: "/device"}}
+
+	if got := m.ghostCompletion(); got != "vice" {
+		t.Fatalf("ghostCompletion() = %q, want %q", got, "vice")
+	}
+}
+
+func TestPlaybackErrorShowsBannerAndBackoff(t *testing.T) {
+	m := newModel(stubPlayerService{})
+
+	updated, cmd := m.Update(playbackMsg{err: spoterr.New(spoterr.KindRateLimited, "rate limited")})
+	nextModel := updated.(model)
+	if cmd == nil {
+		t.Fatal("expected polling command")
+	}
+	if nextModel.pollFailures != 1 {
+		t.Fatalf("pollFailures = %d, want 1", nextModel.pollFailures)
+	}
+	if nextModel.bannerText == "" {
+		t.Fatal("expected banner text")
+	}
+	if nextModel.pollEvery < 5*time.Second {
+		t.Fatalf("pollEvery = %v, want backed off interval", nextModel.pollEvery)
 	}
 }

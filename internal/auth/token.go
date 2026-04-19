@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/petrosxen/spotui/internal/config"
+	"github.com/petrosxen/spotui/internal/spoterr"
 )
 
 type Token struct {
@@ -27,7 +27,7 @@ func LoadToken() (*Token, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, errors.New("not logged in; run `spotui login` first")
+			return nil, spoterr.New(spoterr.KindAuthExpired, "not logged in; run `spotui login` first")
 		}
 		return nil, fmt.Errorf("read token: %w", err)
 	}
@@ -46,14 +46,11 @@ func SaveToken(token *Token) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create token dir: %w", err)
-	}
 	data, err := json.MarshalIndent(token, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode token: %w", err)
 	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+	if err := config.WriteSecureFile(path, append(data, '\n')); err != nil {
 		return fmt.Errorf("write token: %w", err)
 	}
 	return nil
