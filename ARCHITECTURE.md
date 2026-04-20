@@ -1,70 +1,86 @@
 # spotui Architecture
 
 ## Overview
-`spotui` now has two front ends: a Cobra CLI and a Bubble Tea TUI. The service layer introduced in Phase 2 remains the boundary that keeps both front ends from reaching into Spotify HTTP details directly.
+`spotui` has two front ends:
+
+- a Cobra CLI in `cmd/spotui`
+- a Bubble Tea TUI launched by `spotui tui`
+
+Both use the same service layer in `internal/app`. That layer owns playback workflows, device selection, search-result resolution, and local-player orchestration.
 
 ## Package Boundaries
 
 ### `cmd/spotui`
-- Parses arguments and prints output.
-- Starts either CLI commands or the `tui` subcommand.
-- Depends on `internal/app` for behavior and `internal/config` for login/config bootstrap.
+- Defines the CLI surface.
+- Loads config, constructs `app.PlayerService`, and prints results.
+- Exposes login, search, playback, device-selection, and local-player commands.
 - Does not call `internal/spotify` directly.
 
 ### `internal/app`
-- Owns application workflows such as search, device selection, playback commands, and search-result reference resolution.
-- Translates raw Spotify responses into app-facing types used by CLI and future TUI code.
-- Owns lightweight caching:
-  - last search is kept in memory and persisted in `config.json`
-  - playlist list is cached in memory for 60 seconds
-- Exposes playback-state data in a UI-friendly shape so the TUI can poll one service method instead of assembling state from multiple API calls.
+- Defines the `PlayerService` interface used by the CLI and TUI.
+- Owns application workflows:
+  - search
+  - playback commands
+  - playback-state aggregation
+  - device selection by id or fuzzy name match
+  - reference resolution for last-search indices and Spotify ids/uris
+  - local-player control through `spotifyd`
+- Maps Spotify responses into app-facing types.
+- Owns lightweight state and caching:
+  - last search is persisted in `config.json`
+  - playlist lists are cached in memory for 60 seconds
+  - last-used device metadata is persisted after selection or observed playback
+- Resolves playback devices in this order:
+  - preferred device id
+  - last used device id
+  - fuzzy match on last used device name
+  - currently active device
 
 ### `internal/ui`
-- Contains the Bubble Tea model and view code.
-- Renders the status bar, search-result list, and query input.
+- Contains the Bubble Tea model, commands, messages, layout, and rendering code.
+- Renders playback state, search results, devices, help, and local-player status.
+- Uses `app.PlayerService` instead of calling auth or Spotify transport layers directly.
 - Polls playback state on an adaptive interval:
-  - faster while music is actively playing
-  - slower while paused
-  - slowest when no active device is available
+  - active playback: about 1.5 seconds
+  - paused playback: 4 seconds
+  - no active device: 6 seconds
 
 ### `internal/spotify`
 - Thin Spotify Web API client.
-- Knows about HTTP paths, request/response payloads, and Spotify-specific error mapping.
-- Does not contain CLI formatting or config-persistence decisions.
+- Owns HTTP transport, request paths, JSON payloads, timeouts, and Spotify-specific error mapping.
+- Uses a token source interface provided by `internal/auth`.
 
 ### `internal/auth`
-- Handles OAuth PKCE login, token persistence, and token refresh.
+- Handles Authorization Code with PKCE login.
+- Runs the loopback callback server.
+- Loads, saves, validates, and refreshes tokens.
 
 ### `internal/config`
-- Loads and saves local configuration under `~/.config/spotui/`.
-- Stores stable user preferences and the persisted last-search cache.
+- Loads and saves config under `~/.config/spotui/` or `XDG_CONFIG_HOME`.
+- Stores Spotify client settings, device preferences, persisted last-search results, and local-player config.
+- Provides secure file-writing helpers and runtime/token paths.
 
-## Why This Prevents Spaghetti
+### `internal/spotifyd`
+- Manages the optional local `spotifyd` process.
+- Resolves the binary, generates runtime config, starts and stops the process, and tracks runtime metadata.
+- Uses runtime files under `~/.config/spotui/runtime/spotifyd/`.
 
-Before Phase 2, `cmd/spotui` handled argument parsing, device matching, last-search persistence, search-index resolution, and direct Spotify client calls in one file. That works for a small CLI, but it becomes brittle as soon as a second UI exists.
+### `internal/spoterr`
+- Defines typed errors for auth expiry, no active device, rate limiting, premium-required, and network failures.
+- Keeps error handling consistent across the Spotify client, service layer, and TUI.
 
-With the new boundary, both the CLI and a future Bubble Tea TUI can call the same `internal/app.PlayerService` methods. That keeps:
+## Runtime Flow
 
-- transport logic in `internal/spotify`
-- workflow and caching logic in `internal/app`
-- presentation logic in `cmd/spotui` or future `internal/ui`
+1. `cmd/spotui` loads config and dispatches a CLI command or launches the TUI.
+2. `internal/app.NewPlayerService` wires together config, auth, the Spotify API client, and the `spotifyd` manager.
+3. The CLI and TUI call `PlayerService` methods.
+4. `internal/app` applies workflow rules, cache lookups, and persisted-state updates.
+5. `internal/spotify` performs Spotify Web API requests using tokens from `internal/auth`.
+6. Results are mapped into app-facing types and rendered by the CLI or TUI.
 
-This matters because the TUI needs the same actions as the CLI plus polling and richer state. Reusing the service avoids duplicating device-selection rules, search caching, playback behavior, and reference-resolution logic across two front ends.
+## Local Player Flow
 
-## Current Data Flow
-
-1. `cmd/spotui` loads config and starts either a CLI command or `internal/ui`.
-2. `internal/app` creates the auth manager and Spotify client, then executes the requested workflow.
-3. `internal/spotify` performs HTTP requests against the Spotify Web API.
-4. `internal/app` updates caches or persisted config when needed and returns app-facing types.
-5. `cmd/spotui` or `internal/ui` renders the result.
-
-## Polling Strategy
-
-The TUI only polls playback state, and it adapts the interval based on the latest known state:
-
-- active playback: about every 1.5 seconds
-- paused playback: every 4 seconds
-- no active device: every 6 seconds
-
-That keeps the status bar responsive without hammering Spotify when there is nothing changing.
+1. `spotui local ...` or TUI slash commands call local-player methods on `PlayerService`.
+2. `internal/app` delegates process control to `internal/spotifyd`.
+3. After startup, `internal/app` polls Spotify devices until the configured local device appears.
+4. Once found, that device becomes the preferred playback target.
