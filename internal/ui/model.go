@@ -259,6 +259,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showBannerForError(msg.err)
 			return m, fetchLocalPlayerStatusCmd(m.service)
 		}
+		if msg.status.supported {
+			m.localPlayer = msg.status
+		}
 		actionCmd := m.setLastAction(msg.text, false)
 		m.clearBanner()
 		return m, tea.Batch(actionCmd, fetchPlaybackCmd(m.service), fetchLocalPlayerStatusCmd(m.service))

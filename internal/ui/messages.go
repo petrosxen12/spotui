@@ -47,8 +47,9 @@ type localPlayerStatusMsg struct {
 }
 
 type localPlayerActionMsg struct {
-	text string
-	err  error
+	text   string
+	status localPlayerStatus
+	err    error
 }
 
 type accentColorMsg struct {

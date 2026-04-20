@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,9 @@ type stubPlayerService struct {
 	listDevices       func(context.Context) ([]app.Device, error)
 	localPlayerStatus app.LocalPlayerStatus
 	startLocalPlayer  func(context.Context) error
+	resetLocalPlayer  func(context.Context) error
+	stopLocalPlayer   func(context.Context) error
+	useLocalPlayer    func(context.Context) error
 }
 
 func (s stubPlayerService) CurrentUser(context.Context) (app.User, error) {
@@ -81,11 +85,24 @@ func (s stubPlayerService) StartLocalPlayer(ctx context.Context) error {
 	return nil
 }
 
-func (s stubPlayerService) StopLocalPlayer(context.Context) error {
+func (s stubPlayerService) StopLocalPlayer(ctx context.Context) error {
+	if s.stopLocalPlayer != nil {
+		return s.stopLocalPlayer(ctx)
+	}
 	return nil
 }
 
-func (s stubPlayerService) UseLocalPlayer(context.Context) error {
+func (s stubPlayerService) UseLocalPlayer(ctx context.Context) error {
+	if s.useLocalPlayer != nil {
+		return s.useLocalPlayer(ctx)
+	}
+	return nil
+}
+
+func (s stubPlayerService) ResetLocalPlayer(ctx context.Context) error {
+	if s.resetLocalPlayer != nil {
+		return s.resetLocalPlayer(ctx)
+	}
 	return nil
 }
 
@@ -206,21 +223,61 @@ func TestPlaySuggestionsUsesFuzzyTitleMatch(t *testing.T) {
 	}
 }
 
-func TestBuildSuggestionsIncludesLocalStartCommand(t *testing.T) {
+func TestBuildSuggestionsIncludesLocalCommands(t *testing.T) {
 	m := newModel(stubPlayerService{})
 
 	suggestions := m.buildSuggestions("/loc")
-	if len(suggestions) == 0 {
-		t.Fatal("expected local command suggestion")
+	if len(suggestions) < 2 {
+		t.Fatalf("expected multiple local command suggestions, got %d", len(suggestions))
 	}
 	if suggestions[0].insertValue != "/local start" {
 		t.Fatalf("unexpected insert value %q", suggestions[0].insertValue)
+	}
+	foundReset := false
+	for _, suggestion := range suggestions {
+		if suggestion.insertValue == "/local reset" {
+			foundReset = true
+			break
+		}
+	}
+	if !foundReset {
+		t.Fatal("expected /local reset suggestion")
+	}
+}
+
+func TestBuildSuggestionsIncludesLocalSubcommandsAfterSpace(t *testing.T) {
+	m := newModel(stubPlayerService{})
+
+	suggestions := m.buildSuggestions("/local ")
+	if len(suggestions) < 4 {
+		t.Fatalf("expected full local subcommand list, got %d", len(suggestions))
+	}
+	if suggestions[0].insertValue != "/local start" {
+		t.Fatalf("unexpected first suggestion %q", suggestions[0].insertValue)
+	}
+}
+
+func TestBuildSuggestionsFiltersLocalSubcommands(t *testing.T) {
+	m := newModel(stubPlayerService{})
+
+	suggestions := m.buildSuggestions("/local re")
+	if len(suggestions) != 1 {
+		t.Fatalf("expected exactly one filtered local suggestion, got %d", len(suggestions))
+	}
+	if suggestions[0].insertValue != "/local reset" {
+		t.Fatalf("unexpected filtered suggestion %q", suggestions[0].insertValue)
 	}
 }
 
 func TestLocalStartCommandCallsService(t *testing.T) {
 	called := 0
 	m := newModel(stubPlayerService{
+		localPlayerStatus: app.LocalPlayerStatus{
+			Binary:  app.LocalPlayerBinary{Available: true},
+			Process: app.LocalPlayerProcess{State: "running"},
+			Device:  app.LocalPlayerDevice{Name: "spotui-speaker"},
+			Message: app.LocalPlayerMessage{Text: "ready"},
+		},
 		startLocalPlayer: func(context.Context) error {
 			called++
 			return nil
@@ -239,8 +296,75 @@ func TestLocalStartCommandCallsService(t *testing.T) {
 	if action.err != nil {
 		t.Fatalf("unexpected error: %v", action.err)
 	}
+	if action.text == "Started local player" {
+		t.Fatal("expected action text to include refreshed local-player status")
+	}
 	if called != 1 {
 		t.Fatalf("expected StartLocalPlayer to be called once, got %d", called)
+	}
+}
+
+func TestLocalResetCommandCallsService(t *testing.T) {
+	called := 0
+	m := newModel(stubPlayerService{
+		localPlayerStatus: app.LocalPlayerStatus{
+			Binary:  app.LocalPlayerBinary{Available: true},
+			Process: app.LocalPlayerProcess{State: "stopped"},
+			Message: app.LocalPlayerMessage{Text: "ready"},
+		},
+		resetLocalPlayer: func(context.Context) error {
+			called++
+			return nil
+		},
+	})
+
+	cmd := m.runSlashCommand("/local reset")
+	if cmd == nil {
+		t.Fatal("expected reset command")
+	}
+	msg := cmd()
+	action, ok := msg.(localPlayerActionMsg)
+	if !ok {
+		t.Fatalf("expected localPlayerActionMsg, got %T", msg)
+	}
+	if action.err != nil {
+		t.Fatalf("unexpected error: %v", action.err)
+	}
+	if action.text == "Reset local player" {
+		t.Fatal("expected reset text to include refreshed local-player status")
+	}
+	if called != 1 {
+		t.Fatalf("expected ResetLocalPlayer to be called once, got %d", called)
+	}
+}
+
+func TestLocalStatusCommandShowsConcreteFeedback(t *testing.T) {
+	m := newModel(stubPlayerService{
+		localPlayerStatus: app.LocalPlayerStatus{
+			Binary:  app.LocalPlayerBinary{Available: true},
+			Process: app.LocalPlayerProcess{State: "running"},
+			Device:  app.LocalPlayerDevice{Name: "spotui-speaker"},
+			Message: app.LocalPlayerMessage{Text: "ready"},
+		},
+	})
+
+	cmd := m.runSlashCommand("/local status")
+	if cmd == nil {
+		t.Fatal("expected status command")
+	}
+	msg := cmd()
+	action, ok := msg.(localPlayerActionMsg)
+	if !ok {
+		t.Fatalf("expected localPlayerActionMsg, got %T", msg)
+	}
+	if action.err != nil {
+		t.Fatalf("unexpected error: %v", action.err)
+	}
+	if action.text == "" || action.text == "Fetched local player status" {
+		t.Fatalf("expected concrete status feedback, got %q", action.text)
+	}
+	if !strings.Contains(action.text, "Current state: running") {
+		t.Fatalf("expected running state in feedback, got %q", action.text)
 	}
 }
 

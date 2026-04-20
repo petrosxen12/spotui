@@ -37,12 +37,14 @@ type PlayerService interface {
 	StartLocalPlayer(ctx context.Context) error
 	StopLocalPlayer(ctx context.Context) error
 	UseLocalPlayer(ctx context.Context) error
+	ResetLocalPlayer(ctx context.Context) error
 }
 
 type localPlayerManager interface {
 	Status(ctx context.Context) (spotifyd.Status, error)
 	Start(ctx context.Context) (spotifyd.Status, error)
 	Stop(ctx context.Context) error
+	Reset(ctx context.Context) error
 }
 
 type Service struct {
@@ -347,6 +349,17 @@ func (s *Service) UseLocalPlayer(ctx context.Context) error {
 		return nil
 	}
 	return s.StartLocalPlayer(ctx)
+}
+
+func (s *Service) ResetLocalPlayer(ctx context.Context) error {
+	if err := s.local.Reset(ctx); err != nil {
+		return err
+	}
+	s.cfg.PreferredDeviceID = ""
+	if strings.EqualFold(s.cfg.LastUsedDevice.Name, s.cfg.LocalPlayer.DeviceName) {
+		s.cfg.LastUsedDevice = config.LastDevice{}
+	}
+	return config.Save(s.cfg)
 }
 
 func (s *Service) resolvePlaybackDevice(ctx context.Context) (string, error) {

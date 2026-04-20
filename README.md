@@ -26,6 +26,22 @@ Terminal Spotify controller with a CLI and Bubble Tea TUI, plus optional lightwe
 - Spotify Premium for playback control
 - `spotifyd` on Linux for local playback without the full Spotify desktop app
 
+### Recommended `spotifyd` Install
+
+For Linux desktop setups, prefer the upstream `spotifyd` release binary over the Homebrew build.
+
+Why:
+
+- some Homebrew Linux builds expose a reduced backend set
+- PipeWire/PulseAudio desktop systems work better with a full upstream build
+- `spotui` can point at any `spotifyd` binary via `local_player.spotifyd_path`
+
+Typical Ubuntu/PipeWire setup:
+
+- install the upstream `spotifyd` `linux-x86_64-full` release
+- place it somewhere stable such as `~/.local/bin/spotifyd`
+- set `local_player.spotifyd_path` in `~/.config/spotui/config.json`
+
 ## Quick Start
 
 1. Create a Spotify app at <https://developer.spotify.com/dashboard>
@@ -104,8 +120,22 @@ spotui play playlist 1
 spotui local status
 spotui local start
 spotui local use
+spotui local reset
 spotui local stop
 ```
+
+Recommended local-player config shape:
+
+```json
+{
+  "local_player": {
+    "backend": "pulseaudio",
+    "spotifyd_path": "/home/you/.local/bin/spotifyd"
+  }
+}
+```
+
+On PipeWire desktops, leave `audio_device` empty unless you specifically need to force a sink.
 
 ## TUI
 
@@ -121,13 +151,17 @@ spotui local stop
 ### Slash Commands
 
 - `/help`
+- `/local start`
+- `/local stop`
+- `/local use`
+- `/local status`
+- `/local reset`
 - `/next`
 - `/prev`
 - `/pause`
 - `/resume`
 - `/devices`
 - `/device <name>`
-- `/local start`
 - `/play <query|index>`
 - `/quit`
 
@@ -135,6 +169,7 @@ spotui local stop
 
 - Suggestions appear for `/` commands
 - Best match is shown inline as ghost completion
+- `/local` expands to local-player subcommands such as `start`, `stop`, `use`, `status`, and `reset`
 - `/device` uses known Spotify devices
 - `/play` uses the latest TUI search results
 
@@ -178,6 +213,38 @@ If `spotifyd` is installed, run:
 ```bash
 spotui local use
 ```
+
+If local-player runtime state is stuck or pointing at the wrong `spotifyd` process, reset it with:
+
+```bash
+spotui local reset
+```
+
+### `spotifyd` exits during startup
+
+`spotui` now surfaces the tail of the managed `spotifyd` log on startup failure.
+
+Common causes:
+
+- unsupported backend in the installed `spotifyd` build
+- invalid `audio_device`
+- local audio stack mismatch
+
+If needed, inspect the full log directly:
+
+```bash
+tail -n 100 ~/.config/spotui/runtime/spotifyd/spotifyd.log
+```
+
+### Linux audio backend issues
+
+If you are on a PipeWire desktop and local playback is unstable:
+
+- prefer an upstream `spotifyd` full build
+- use `backend = "pulseaudio"` when that build supports it
+- avoid forcing `audio_device` until the default path works
+
+If you see PortAudio-specific device errors, the installed `spotifyd` build is often the problem rather than `spotui`.
 
 ### Login expired
 

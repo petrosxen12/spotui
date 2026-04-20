@@ -414,6 +414,25 @@ func newLocalCmd() *cobra.Command {
 		},
 	})
 
+	cmd.AddCommand(&cobra.Command{
+		Use:   "reset",
+		Short: "Stop the current spotifyd process and clear managed runtime metadata",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return withService(cfg, func(service app.PlayerService) error {
+				if err := service.ResetLocalPlayer(cmd.Context()); err != nil {
+					return err
+				}
+				fmt.Println("Local spotifyd runtime was reset.")
+				return nil
+			})
+		},
+	})
+
 	return cmd
 }
 

@@ -1,6 +1,7 @@
 package spotifyd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -277,12 +278,16 @@ func (m *Manager) Start(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 
+	// Give spotifyd a brief window to reject an invalid config before we report success.
+	time.Sleep(250 * time.Millisecond)
 	status, err := m.Status(ctx)
 	if err != nil {
 		return Status{}, err
 	}
 	if status.ProcessState == ProcessStateStopped {
-		status.ProcessState = ProcessStateStarting
+		return Status{}, m.startupFailure()
+	}
+	if status.ProcessState == ProcessStateStarting {
 		status.PID = pid
 		status.StartedAt = state.StartedAt
 		status.BinaryPath = binaryPath
@@ -303,34 +308,47 @@ func (m *Manager) Stop(ctx context.Context) error {
 	if status.ProcessState == ProcessStateUnhealthy {
 		return errors.New("refusing to stop unmanaged process referenced by spotifyd runtime metadata")
 	}
+	if err := terminateProcess(ctx, status.PID); err != nil {
+		return err
+	}
+	return m.cleanupStaleRuntimeState()
+}
 
-	proc, err := os.FindProcess(status.PID)
+func (m *Manager) Reset(ctx context.Context) error {
+	state, _, err := m.loadRuntimeState()
 	if err != nil {
-		return fmt.Errorf("find spotifyd process: %w", err)
+		return err
 	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return fmt.Errorf("terminate spotifyd: %w", err)
-	}
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		alive, err := processAlive(status.PID)
-		if err != nil {
-			return err
-		}
-		if !alive {
-			return m.cleanupStaleRuntimeState()
-		}
-		time.Sleep(100 * time.Millisecond)
+	if state == nil || state.PID == 0 {
+		return m.cleanupStaleRuntimeState()
 	}
 
-	if err := proc.Signal(syscall.SIGKILL); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return fmt.Errorf("kill spotifyd: %w", err)
+	alive, err := processAlive(state.PID)
+	if err != nil {
+		return err
+	}
+	if !alive {
+		return m.cleanupStaleRuntimeState()
+	}
+
+	matches, err := matchesManagedCommand(state.PID, *state)
+	if err != nil {
+		return err
+	}
+	if matches {
+		return m.Stop(ctx)
+	}
+
+	isSpotifyd, err := processLooksLikeSpotifyd(state.PID, state.BinaryPath)
+	if err != nil {
+		return err
+	}
+	if !isSpotifyd {
+		return errors.New("refusing to reset runtime metadata that points to a non-spotifyd live process")
+	}
+
+	if err := terminateProcess(ctx, state.PID); err != nil {
+		return err
 	}
 	return m.cleanupStaleRuntimeState()
 }
@@ -495,12 +513,128 @@ func processAlive(pid int) (bool, error) {
 	}
 	err := syscall.Kill(pid, 0)
 	if err == nil {
-		return true, nil
+		return !processZombie(pid), nil
 	}
 	if errors.Is(err, syscall.ESRCH) {
 		return false, nil
 	}
 	return false, fmt.Errorf("inspect process %d: %w", pid, err)
+}
+
+func processZombie(pid int) bool {
+	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return false
+	}
+	parts := strings.Fields(string(data))
+	return len(parts) > 2 && parts[2] == "Z"
+}
+
+func processLooksLikeSpotifyd(pid int, binaryPath string) (bool, error) {
+	args, err := readCmdlineArgs(pid)
+	if err != nil {
+		return false, err
+	}
+	if len(args) == 0 {
+		return false, nil
+	}
+
+	binaryBase := filepath.Base(binaryPath)
+	if binaryBase == "" {
+		binaryBase = "spotifyd"
+	}
+	return hasExpectedBinaryArg(args, binaryBase, binaryPath), nil
+}
+
+func terminateProcess(ctx context.Context, pid int) error {
+	if err := signalProcessGroup(pid, syscall.SIGTERM); err != nil {
+		return err
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		alive, err := processAlive(pid)
+		if err != nil {
+			return err
+		}
+		if !alive {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if err := signalProcessGroup(pid, syscall.SIGKILL); err != nil {
+		return err
+	}
+	return nil
+}
+
+func signalProcessGroup(pid int, signal syscall.Signal) error {
+	if pid <= 0 {
+		return nil
+	}
+	err := syscall.Kill(-pid, signal)
+	if err == nil || errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	return fmt.Errorf("%s spotifyd: %w", signalLabel(signal), err)
+}
+
+func signalLabel(signal syscall.Signal) string {
+	switch signal {
+	case syscall.SIGTERM:
+		return "terminate"
+	case syscall.SIGKILL:
+		return "kill"
+	default:
+		return "signal"
+	}
+}
+
+func (m *Manager) startupFailure() error {
+	excerpt := tailLog(m.files.LogPath, 12)
+	if excerpt == "" {
+		return fmt.Errorf("spotifyd exited during startup; check %s", m.files.LogPath)
+	}
+	return fmt.Errorf("spotifyd exited during startup; check %s\n%s", m.files.LogPath, excerpt)
+}
+
+func tailLog(path string, maxLines int) string {
+	file, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+
+	lines := make([]string, 0, maxLines)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+		if len(lines) > maxLines {
+			lines = lines[1:]
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func readCmdlineArgs(pid int) ([]string, error) {
+	cmdlinePath := filepath.Join("/proc", strconv.Itoa(pid), "cmdline")
+	data, err := os.ReadFile(cmdlinePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read spotifyd cmdline: %w", err)
+	}
+	return parseCmdline(data), nil
 }
 
 func isExecutableFile(path string) bool {

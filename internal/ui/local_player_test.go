@@ -82,6 +82,10 @@ func (reflectedLocalPlayerService) UseLocalPlayer(context.Context) error {
 	return nil
 }
 
+func (reflectedLocalPlayerService) ResetLocalPlayer(context.Context) error {
+	return nil
+}
+
 func TestGetLocalPlayerStatusReflectsServiceShape(t *testing.T) {
 	status, err := getLocalPlayerStatus(reflectedLocalPlayerService{})
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/petrosxen/spotui/internal/app"
@@ -71,13 +72,72 @@ func fetchLocalPlayerStatusCmd(service app.PlayerService) tea.Cmd {
 	}
 }
 
+func localPlayerStatusActionCmd(service app.PlayerService) tea.Cmd {
+	return func() tea.Msg {
+		status, err := getLocalPlayerStatus(service)
+		if err != nil {
+			return localPlayerActionMsg{text: "Failed to fetch local player status", err: err}
+		}
+		return localPlayerActionMsg{
+			text:   formatLocalPlayerAction("Fetched local player status", status),
+			status: status,
+		}
+	}
+}
+
 func startLocalPlayerCmd(service app.PlayerService) tea.Cmd {
 	return func() tea.Msg {
 		err := callServiceContextMethod(service, "StartLocalPlayer")
 		if err != nil {
 			return localPlayerActionMsg{text: "Failed to start local player", err: err}
 		}
-		return localPlayerActionMsg{text: "Started local player", err: nil}
+		status, statusErr := getLocalPlayerStatus(service)
+		if statusErr != nil {
+			return localPlayerActionMsg{text: "Started local player", err: nil}
+		}
+		return localPlayerActionMsg{text: formatLocalPlayerAction("Started local player", status), status: status, err: nil}
+	}
+}
+
+func stopLocalPlayerCmd(service app.PlayerService) tea.Cmd {
+	return func() tea.Msg {
+		err := callServiceContextMethod(service, "StopLocalPlayer")
+		if err != nil {
+			return localPlayerActionMsg{text: "Failed to stop local player", err: err}
+		}
+		status, statusErr := getLocalPlayerStatus(service)
+		if statusErr != nil {
+			return localPlayerActionMsg{text: "Stopped local player", err: nil}
+		}
+		return localPlayerActionMsg{text: formatLocalPlayerAction("Stopped local player", status), status: status, err: nil}
+	}
+}
+
+func useLocalPlayerCmd(service app.PlayerService) tea.Cmd {
+	return func() tea.Msg {
+		err := callServiceContextMethod(service, "UseLocalPlayer")
+		if err != nil {
+			return localPlayerActionMsg{text: "Failed to select local player", err: err}
+		}
+		status, statusErr := getLocalPlayerStatus(service)
+		if statusErr != nil {
+			return localPlayerActionMsg{text: "Selected local player", err: nil}
+		}
+		return localPlayerActionMsg{text: formatLocalPlayerAction("Selected local player", status), status: status, err: nil}
+	}
+}
+
+func resetLocalPlayerCmd(service app.PlayerService) tea.Cmd {
+	return func() tea.Msg {
+		err := callServiceContextMethod(service, "ResetLocalPlayer")
+		if err != nil {
+			return localPlayerActionMsg{text: "Failed to reset local player", err: err}
+		}
+		status, statusErr := getLocalPlayerStatus(service)
+		if statusErr != nil {
+			return localPlayerActionMsg{text: "Reset local player", err: nil}
+		}
+		return localPlayerActionMsg{text: formatLocalPlayerAction("Reset local player", status), status: status, err: nil}
 	}
 }
 
@@ -111,6 +171,48 @@ func getLocalPlayerStatus(service app.PlayerService) (localPlayerStatus, error) 
 	}
 
 	return status, nil
+}
+
+func formatLocalPlayerAction(prefix string, status localPlayerStatus) string {
+	suffix := localPlayerSummary(status)
+	if suffix == "" {
+		return prefix
+	}
+	return prefix + ". " + suffix
+}
+
+func localPlayerSummary(status localPlayerStatus) string {
+	if !status.supported {
+		return ""
+	}
+
+	parts := make([]string, 0, 3)
+	state := status.process
+	if state == "" {
+		if status.binaryAvailable {
+			state = "ready"
+		} else {
+			state = "unavailable"
+		}
+	}
+	parts = append(parts, "Current state: "+state)
+	if status.device != "" {
+		parts = append(parts, "device "+status.device)
+	}
+	if status.message != "" {
+		parts = append(parts, status.message)
+	}
+	return joinLocalPlayerSummary(parts)
+}
+
+func joinLocalPlayerSummary(parts []string) string {
+	filtered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			filtered = append(filtered, part)
+		}
+	}
+	return strings.Join(filtered, " · ")
 }
 
 func callServiceContextMethod(service app.PlayerService, name string) error {

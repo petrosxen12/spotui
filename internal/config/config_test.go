@@ -17,8 +17,8 @@ func TestLoadAppliesLocalPlayerDefaultsWhenAbsent(t *testing.T) {
 	if cfg.LocalPlayer.DeviceName != "spotui" {
 		t.Fatalf("DeviceName = %q, want %q", cfg.LocalPlayer.DeviceName, "spotui")
 	}
-	if cfg.LocalPlayer.Backend != "pulseaudio" {
-		t.Fatalf("Backend = %q, want %q", cfg.LocalPlayer.Backend, "pulseaudio")
+	if cfg.LocalPlayer.Backend != "portaudio" {
+		t.Fatalf("Backend = %q, want %q", cfg.LocalPlayer.Backend, "portaudio")
 	}
 	if cfg.LocalPlayer.Bitrate != 320 {
 		t.Fatalf("Bitrate = %d, want 320", cfg.LocalPlayer.Bitrate)

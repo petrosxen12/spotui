@@ -98,7 +98,7 @@ func DefaultLocalPlayerConfig() LocalPlayerConfig {
 	return LocalPlayerConfig{
 		Enabled:                false,
 		DeviceName:             "spotui",
-		Backend:                "pulseaudio",
+		Backend:                "portaudio",
 		Bitrate:                320,
 		InitialVolume:          100,
 		AutostartPromptEnabled: true,
