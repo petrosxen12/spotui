@@ -41,6 +41,17 @@ type deviceSelectedMsg struct {
 
 type helpMsg struct{}
 
+type localPlayerStatusMsg struct {
+	status localPlayerStatus
+	err    error
+}
+
+type localPlayerActionMsg struct {
+	text   string
+	status localPlayerStatus
+	err    error
+}
+
 type accentColorMsg struct {
 	albumArtURL string
 	color       string

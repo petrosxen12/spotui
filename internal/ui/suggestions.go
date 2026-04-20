@@ -62,18 +62,20 @@ func (m model) buildSuggestions(raw string) []suggestion {
 		prefix := "/" + command
 		matches := make([]suggestion, 0)
 		for _, candidate := range slashCommands {
-			if strings.HasPrefix(candidate.name, prefix) {
+			if strings.HasPrefix(candidate.name, prefix) || strings.HasPrefix(candidate.usage, prefix) {
 				matches = append(matches, suggestion{
-					value:       candidate.name,
-					insertValue: candidate.name,
+					value:       candidate.usage,
+					insertValue: candidate.usage,
 					description: candidate.description,
 				})
 			}
 		}
-		return matches
+		return dedupeSuggestions(matches)
 	}
 
 	switch command {
+	case "local":
+		return localCommandSuggestions(strings.TrimSpace(arg))
 	case "device":
 		if !m.deviceCacheReady {
 			return nil
@@ -84,6 +86,42 @@ func (m model) buildSuggestions(raw string) []suggestion {
 	default:
 		return nil
 	}
+}
+
+func localCommandSuggestions(prefix string) []suggestion {
+	suggestions := make([]suggestion, 0)
+	for _, candidate := range slashCommands {
+		if candidate.name != "/local" {
+			continue
+		}
+		subcommand := strings.TrimSpace(strings.TrimPrefix(candidate.usage, "/local"))
+		if prefix != "" && !strings.HasPrefix(subcommand, prefix) {
+			continue
+		}
+		suggestions = append(suggestions, suggestion{
+			value:       candidate.usage,
+			insertValue: candidate.usage,
+			description: candidate.description,
+		})
+	}
+	return dedupeSuggestions(suggestions)
+}
+
+func dedupeSuggestions(in []suggestion) []suggestion {
+	if len(in) < 2 {
+		return in
+	}
+	out := make([]suggestion, 0, len(in))
+	seen := make(map[string]struct{}, len(in))
+	for _, suggestion := range in {
+		key := suggestion.insertValue + "\x00" + suggestion.description
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, suggestion)
+	}
+	return out
 }
 
 func (m *model) maybeRefreshDeviceCache(raw string) tea.Cmd {

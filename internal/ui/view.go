@@ -324,7 +324,7 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 		case listModeHelp:
 			body = subtitleStyle.Render("Type /help to load the command list.")
 		default:
-			body = subtitleStyle.Render("Type a query below and let the list settle into view.")
+			body = subtitleStyle.Render(m.emptyResultsHint())
 		}
 	}
 
@@ -360,6 +360,18 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 	}
 
 	lines := []string{infoStyle.Render(truncateText(m.connectionStatus, width))}
+	if line := m.localPlayer.statusLine(); line != "" && (layout.footerShowStatus || m.playback.Device.ID == "") {
+		tone := infoStyle
+		switch m.localPlayer.statusTone() {
+		case "success":
+			tone = successStyle.Copy().Foreground(lipgloss.Color(m.vividAccentColor()))
+		case "error":
+			tone = errorStyle
+		case "subtle":
+			tone = commandHintStyle
+		}
+		lines = append(lines, tone.Render(truncateText(line, width)))
+	}
 	if m.bannerText != "" {
 		tone := commandHintStyle
 		if m.bannerIsError {
@@ -412,6 +424,10 @@ func (m model) contextRailView(layout layoutMetrics) string {
 		lines = append(lines, "")
 		lines = append(lines, subtitleStyle.Render("Output"))
 		lines = append(lines, infoStyle.Render(truncateText(m.playback.Device.Name, layout.railWidth)))
+	} else if line := m.localPlayer.statusLine(); line != "" {
+		lines = append(lines, "")
+		lines = append(lines, subtitleStyle.Render("Local player"))
+		lines = append(lines, infoStyle.Render(truncateText(line, layout.railWidth)))
 	}
 
 	if m.playback.NextItemName != "" {
@@ -430,6 +446,22 @@ func (m model) contextRailView(layout layoutMetrics) string {
 	}
 
 	return lipgloss.NewStyle().Width(layout.railWidth).Render(strings.Join(lines, "\n"))
+}
+
+func (m model) emptyResultsHint() string {
+	if m.playback.Device.ID == "" && m.localPlayer.supported && (m.localPlayer.process == "running" || m.localPlayer.process == "starting") {
+		if m.localPlayer.device != "" {
+			return "Type a query below. Waiting for local player " + m.localPlayer.device + " to become the active output."
+		}
+		return "Type a query below. Waiting for the local player to become the active output."
+	}
+	if m.playback.Device.ID == "" && m.localPlayer.supported && m.localPlayer.binaryAvailable {
+		return "Type a query below, or run /local start to boot the lightweight local player."
+	}
+	if m.playback.Device.ID == "" && m.localPlayer.supported && !m.localPlayer.binaryAvailable && m.localPlayer.message != "" {
+		return "Type a query below. Local player is unavailable: " + m.localPlayer.message
+	}
+	return "Type a query below and let the list settle into view."
 }
 
 func (m model) commandDockView(layout layoutMetrics) string {

@@ -27,6 +27,33 @@ type Device struct {
 	IsActive bool
 }
 
+type LocalPlayerBinary struct {
+	Available bool
+}
+
+type LocalPlayerProcess struct {
+	State string
+}
+
+type LocalPlayerMessage struct {
+	Text string
+}
+
+type LocalPlayerDevice struct {
+	ID   string
+	Name string
+}
+
+type LocalPlayerStatus struct {
+	Enabled        bool
+	Binary         LocalPlayerBinary
+	Process        LocalPlayerProcess
+	Device         LocalPlayerDevice
+	Message        LocalPlayerMessage
+	ConfiguredName string
+	LogPath        string
+}
+
 type Playlist struct {
 	ID   string
 	Name string

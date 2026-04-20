@@ -94,7 +94,7 @@ func RetryAfter(err error) time.Duration {
 func BannerMessage(err error) string {
 	switch KindOf(err) {
 	case KindNoActiveDevice:
-		return "No active device. Open Spotify on a device, then select it with /device."
+		return "No active device. Use `/local start` in the TUI or `spotui local use` from the CLI."
 	case KindAuthExpired:
 		return "Spotify login expired. Run `spotui login` again."
 	case KindPremiumRequired:

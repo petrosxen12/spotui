@@ -131,3 +131,27 @@ func TestResultDelegateTruncatesLongRows(t *testing.T) {
 		}
 	}
 }
+
+func TestFooterShowsLocalPlayerStatus(t *testing.T) {
+	m := newModel(nil)
+	m.width = 120
+	m.height = 26
+	m.connectionStatus = "Connected as tester"
+	m.localPlayer = localPlayerStatus{
+		supported:       true,
+		binaryAvailable: true,
+		process:         "running",
+		device:          "spotui-speaker",
+		message:         "ready",
+	}
+
+	layout := m.layoutMetrics()
+	footer := m.footerPanel(layout.mainWidth, layout)
+
+	if !strings.Contains(footer, "Local player: running") {
+		t.Fatalf("expected footer to include local player status, got %q", footer)
+	}
+	if !strings.Contains(footer, "spotui-speaker") {
+		t.Fatalf("expected footer to include local device name, got %q", footer)
+	}
+}

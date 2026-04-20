@@ -20,6 +20,11 @@ type slashCommand struct {
 
 var slashCommands = []slashCommand{
 	{name: "/help", usage: "/help", description: "show command help"},
+	{name: "/local", usage: "/local start", description: "start the lightweight local player"},
+	{name: "/local", usage: "/local stop", description: "stop the lightweight local player"},
+	{name: "/local", usage: "/local use", description: "start and select the local player"},
+	{name: "/local", usage: "/local status", description: "show local-player status"},
+	{name: "/local", usage: "/local reset", description: "kill the current local player and clear runtime metadata"},
 	{name: "/next", usage: "/next", description: "skip to the next item"},
 	{name: "/prev", usage: "/prev", description: "go back to the previous item"},
 	{name: "/pause", usage: "/pause", description: "pause playback"},
@@ -58,6 +63,22 @@ func (m model) runSlashCommand(raw string) tea.Cmd {
 	switch command {
 	case "help":
 		return func() tea.Msg { return helpMsg{} }
+	case "local":
+		action := strings.TrimSpace(arg)
+		switch action {
+		case "start":
+			return startLocalPlayerCmd(m.service)
+		case "stop":
+			return stopLocalPlayerCmd(m.service)
+		case "use":
+			return useLocalPlayerCmd(m.service)
+		case "status":
+			return localPlayerStatusActionCmd(m.service)
+		case "reset":
+			return resetLocalPlayerCmd(m.service)
+		default:
+			return func() tea.Msg { return actionMsg{text: "Usage: /local <start|stop|use|status|reset>", err: nil} }
+		}
 	case "next":
 		return func() tea.Msg {
 			return actionMsg{text: "Skipped to next item", err: m.service.Next(context.Background())}

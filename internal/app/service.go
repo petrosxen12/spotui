@@ -11,6 +11,7 @@ import (
 
 	"github.com/petrosxen/spotui/internal/auth"
 	"github.com/petrosxen/spotui/internal/config"
+	"github.com/petrosxen/spotui/internal/spotifyd"
 	"github.com/petrosxen/spotui/internal/spoterr"
 	spotifyapi "github.com/petrosxen/spotui/internal/spotify"
 	"github.com/sahilm/fuzzy"
@@ -32,12 +33,25 @@ type PlayerService interface {
 	ListPlaylists(ctx context.Context) ([]Playlist, error)
 	SetDeviceByID(ctx context.Context, id string) error
 	SetDeviceByName(ctx context.Context, substring string) (Device, error)
+	LocalPlayerStatus(ctx context.Context) (LocalPlayerStatus, error)
+	StartLocalPlayer(ctx context.Context) error
+	StopLocalPlayer(ctx context.Context) error
+	UseLocalPlayer(ctx context.Context) error
+	ResetLocalPlayer(ctx context.Context) error
+}
+
+type localPlayerManager interface {
+	Status(ctx context.Context) (spotifyd.Status, error)
+	Start(ctx context.Context) (spotifyd.Status, error)
+	Stop(ctx context.Context) error
+	Reset(ctx context.Context) error
 }
 
 type Service struct {
 	cfg     *config.Config
 	client  *spotifyapi.Client
 	manager *auth.Manager
+	local   localPlayerManager
 
 	mu                sync.RWMutex
 	lastSearch        Results
@@ -61,6 +75,11 @@ func NewPlayerService(cfg *config.Config) (*Service, error) {
 		manager: manager,
 		client:  spotifyapi.NewClient(cfg, manager),
 	}
+	local, err := spotifyd.NewManager(cfg.LocalPlayer)
+	if err != nil {
+		return nil, err
+	}
+	svc.local = local
 	if len(cfg.LastSearch.Tracks) > 0 || len(cfg.LastSearch.Playlists) > 0 {
 		svc.lastSearch = resultsFromConfig(cfg.LastSearch)
 		svc.lastSearchLoaded = true
@@ -271,13 +290,85 @@ func (s *Service) SetDeviceByName(ctx context.Context, substring string) (Device
 	return match, nil
 }
 
+func (s *Service) LocalPlayerStatus(ctx context.Context) (LocalPlayerStatus, error) {
+	status, err := s.local.Status(ctx)
+	if err != nil {
+		return LocalPlayerStatus{}, err
+	}
+
+	appStatus := LocalPlayerStatus{
+		Enabled:        s.cfg.LocalPlayer.Enabled,
+		Binary:         LocalPlayerBinary{Available: status.BinaryAvailable},
+		Process:        LocalPlayerProcess{State: string(status.ProcessState)},
+		ConfiguredName: status.DeviceName,
+		Message:        LocalPlayerMessage{Text: status.Message},
+		LogPath:        status.RuntimeFiles.LogPath,
+	}
+
+	if device, ok := findDeviceByName(status.DeviceName, s.mustListDevices(ctx)); ok {
+		appStatus.Device = LocalPlayerDevice{ID: device.ID, Name: device.Name}
+		if appStatus.Message.Text == "" {
+			appStatus.Message = LocalPlayerMessage{Text: fmt.Sprintf("Local player available as %s", device.Name)}
+		}
+	}
+
+	return appStatus, nil
+}
+
+func (s *Service) StartLocalPlayer(ctx context.Context) error {
+	if _, err := s.local.Start(ctx); err != nil {
+		return err
+	}
+
+	device, err := s.waitForLocalPlayerDevice(ctx)
+	if err != nil {
+		return err
+	}
+
+	s.cfg.PreferredDeviceID = device.ID
+	s.rememberLastDevice(device, true)
+	return nil
+}
+
+func (s *Service) StopLocalPlayer(ctx context.Context) error {
+	return s.local.Stop(ctx)
+}
+
+func (s *Service) UseLocalPlayer(ctx context.Context) error {
+	status, err := s.LocalPlayerStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if status.Device.ID != "" {
+		s.cfg.PreferredDeviceID = status.Device.ID
+		s.rememberLastDevice(Device{
+			ID:   status.Device.ID,
+			Name: status.Device.Name,
+			Type: "Computer",
+		}, true)
+		return nil
+	}
+	return s.StartLocalPlayer(ctx)
+}
+
+func (s *Service) ResetLocalPlayer(ctx context.Context) error {
+	if err := s.local.Reset(ctx); err != nil {
+		return err
+	}
+	s.cfg.PreferredDeviceID = ""
+	if strings.EqualFold(s.cfg.LastUsedDevice.Name, s.cfg.LocalPlayer.DeviceName) {
+		s.cfg.LastUsedDevice = config.LastDevice{}
+	}
+	return config.Save(s.cfg)
+}
+
 func (s *Service) resolvePlaybackDevice(ctx context.Context) (string, error) {
 	devices, err := s.ListDevices(ctx)
 	if err != nil {
 		return "", err
 	}
 	if len(devices) == 0 {
-		return "", spoterr.New(spoterr.KindNoActiveDevice, "no available Spotify devices; open Spotify on desktop, mobile, or web first")
+		return "", s.noDeviceError(ctx)
 	}
 	if device, ok := findDeviceByID(devices, s.cfg.PreferredDeviceID); ok {
 		return device.ID, nil
@@ -295,7 +386,7 @@ func (s *Service) resolvePlaybackDevice(ctx context.Context) (string, error) {
 			return device.ID, nil
 		}
 	}
-	return "", spoterr.New(spoterr.KindNoActiveDevice, "no active device found and no saved device is currently available; run `spotui use <name>` after starting Spotify on a device")
+	return "", s.noDeviceError(ctx)
 }
 
 func (s *Service) resolveTrackRef(ref string) (string, error) {
@@ -438,12 +529,68 @@ func (s *Service) rememberLastDevice(device Device, selected bool) {
 	_ = config.Save(s.cfg)
 }
 
+func (s *Service) noDeviceError(ctx context.Context) error {
+	status, err := s.LocalPlayerStatus(ctx)
+	if err == nil && status.Binary.Available {
+		return spoterr.New(spoterr.KindNoActiveDevice, "no active Spotify device found; run `spotui local use` to start the local spotifyd player")
+	}
+	return spoterr.New(spoterr.KindNoActiveDevice, "no available Spotify devices; open Spotify on desktop, mobile, web, or run `spotui local use`")
+}
+
+func (s *Service) waitForLocalPlayerDevice(ctx context.Context) (Device, error) {
+	deadline := time.Now().Add(12 * time.Second)
+	for {
+		devices, err := s.ListDevices(ctx)
+		if err == nil {
+			status, statusErr := s.local.Status(ctx)
+			if statusErr == nil {
+				if device, ok := findDeviceByName(status.DeviceName, devices); ok {
+					return device, nil
+				}
+				if device, ok := findDeviceByID(devices, s.cfg.PreferredDeviceID); ok && strings.EqualFold(device.Name, status.DeviceName) {
+					return device, nil
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			return Device{}, fmt.Errorf("spotifyd started but did not appear as a Spotify device within 12s")
+		}
+
+		select {
+		case <-ctx.Done():
+			return Device{}, ctx.Err()
+		case <-time.After(750 * time.Millisecond):
+		}
+	}
+}
+
+func (s *Service) mustListDevices(ctx context.Context) []Device {
+	devices, err := s.ListDevices(ctx)
+	if err != nil {
+		return nil
+	}
+	return devices
+}
+
 func findDeviceByID(devices []Device, id string) (Device, bool) {
 	if id == "" {
 		return Device{}, false
 	}
 	for _, device := range devices {
 		if device.ID == id {
+			return device, true
+		}
+	}
+	return Device{}, false
+}
+
+func findDeviceByName(name string, devices []Device) (Device, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Device{}, false
+	}
+	for _, device := range devices {
+		if strings.EqualFold(device.Name, name) {
 			return device, true
 		}
 	}
