@@ -64,6 +64,7 @@ Both use the same service layer in `internal/app`. That layer owns playback work
 - Manages the optional local `spotifyd` process.
 - Resolves the binary, generates runtime config, starts and stops the process, and tracks runtime metadata.
 - Uses runtime files under `~/.config/spotui/runtime/spotifyd/`.
+- Keeps a small package facade in `manager.go`; config, runtime-state, process inspection, status assembly, and startup/log helpers live in focused package-local files.
 
 ### `internal/spoterr`
 - Defines typed errors for auth expiry, no active device, rate limiting, premium-required, and network failures.

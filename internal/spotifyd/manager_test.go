@@ -13,42 +13,6 @@ import (
 	"github.com/petrosxen/spotui/internal/config"
 )
 
-func TestGenerateConfigIncludesManagedFields(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	manager, err := NewManager(config.LocalPlayerConfig{
-		Enabled:       true,
-		DeviceName:    "office",
-		Backend:       "alsa",
-		AudioDevice:   "hw:0,0",
-		Bitrate:       160,
-		InitialVolume: 75,
-	})
-	if err != nil {
-		t.Fatalf("NewManager() error = %v", err)
-	}
-
-	data, err := manager.GenerateConfig()
-	if err != nil {
-		t.Fatalf("GenerateConfig() error = %v", err)
-	}
-	text := string(data)
-
-	for _, want := range []string{
-		"[global]",
-		`device_name = "office"`,
-		`backend = "alsa"`,
-		`device = "hw:0,0"`,
-		"bitrate = 160",
-		"initial_volume = 75",
-		`cache_path = "`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("generated config missing %q:\n%s", want, text)
-		}
-	}
-}
-
 func TestStatusCleansStaleRuntimeMetadata(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
@@ -165,13 +129,13 @@ func TestResetStopsMismatchedSpotifydProcessAndCleansMetadata(t *testing.T) {
 	}
 
 	state := State{
-		PID:         pid,
-		BinaryPath:  binary,
-		ConfigPath:  manager.Files().ConfigPath,
-		LogPath:     manager.Files().LogPath,
-		DeviceName:  "desk",
-		Backend:     "pulseaudio",
-		StartedAt:   time.Now().UTC(),
+		PID:        pid,
+		BinaryPath: binary,
+		ConfigPath: manager.Files().ConfigPath,
+		LogPath:    manager.Files().LogPath,
+		DeviceName: "desk",
+		Backend:    "pulseaudio",
+		StartedAt:  time.Now().UTC(),
 	}
 	if err := manager.writeRuntimeState(state); err != nil {
 		t.Fatalf("writeRuntimeState() error = %v", err)
