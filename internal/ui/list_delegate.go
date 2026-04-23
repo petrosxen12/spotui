@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -132,30 +133,51 @@ func (i infoItem) FilterValue() string { return i.title + " " + i.description }
 func itemsFromResults(results app.Results) []list.Item {
 	items := make([]list.Item, 0, len(results.Tracks)+len(results.Playlists))
 	for _, track := range results.Tracks {
+		title, ok := visibleResultTitle(track.Name)
+		if !ok {
+			continue
+		}
 		description := "track"
 		if track.Subtitle != "" {
 			description = track.Subtitle
 		}
 		items = append(items, resultItem{
-			title:       track.Name,
+			title:       title,
 			description: description,
 			kind:        "track",
 			uri:         track.URI,
 		})
 	}
 	for _, playlist := range results.Playlists {
+		title, ok := visibleResultTitle(playlist.Name)
+		if !ok {
+			continue
+		}
 		description := "playlist"
 		if playlist.Subtitle != "" {
 			description = "playlist by " + playlist.Subtitle
 		}
 		items = append(items, resultItem{
-			title:       playlist.Name,
+			title:       title,
 			description: description,
 			kind:        "playlist",
 			uri:         playlist.URI,
 		})
 	}
 	return items
+}
+
+func visibleResultTitle(name string) (string, bool) {
+	trimmed := strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf) {
+			return -1
+		}
+		return r
+	}, name))
+	if trimmed == "" || lipgloss.Width(trimmed) == 0 {
+		return "", false
+	}
+	return trimmed, true
 }
 
 func itemsFromDevices(devices []app.Device) []list.Item {
