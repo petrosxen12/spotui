@@ -58,6 +58,15 @@ type Service struct {
 	lastSearchLoaded  bool
 	playlistCache     []Playlist
 	playlistCacheTime time.Time
+	queueCache        queueCache
+}
+
+type queueCache struct {
+	trackURI       string
+	deviceID       string
+	nextItemName   string
+	nextArtistName string
+	valid          bool
 }
 
 func NewPlayerService(cfg *config.Config) (*Service, error) {
@@ -135,7 +144,11 @@ func (s *Service) PlayTrack(ctx context.Context, ref string) error {
 	if err != nil {
 		return err
 	}
-	return s.client.PlayTrack(ctx, deviceID, uri)
+	if err := s.client.PlayTrack(ctx, deviceID, uri); err != nil {
+		return err
+	}
+	s.invalidateQueueCache()
+	return nil
 }
 
 func (s *Service) PlayPlaylist(ctx context.Context, ref string) error {
@@ -148,7 +161,11 @@ func (s *Service) PlayPlaylist(ctx context.Context, ref string) error {
 	if err != nil {
 		return err
 	}
-	return s.client.PlayPlaylist(ctx, deviceID, uri)
+	if err := s.client.PlayPlaylist(ctx, deviceID, uri); err != nil {
+		return err
+	}
+	s.invalidateQueueCache()
+	return nil
 }
 
 func (s *Service) Pause(ctx context.Context) error {
@@ -156,7 +173,11 @@ func (s *Service) Pause(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return s.client.Pause(ctx, deviceID)
+	if err := s.client.Pause(ctx, deviceID); err != nil {
+		return err
+	}
+	s.invalidateQueueCache()
+	return nil
 }
 
 func (s *Service) Resume(ctx context.Context) error {
@@ -164,7 +185,11 @@ func (s *Service) Resume(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return s.client.Resume(ctx, deviceID)
+	if err := s.client.Resume(ctx, deviceID); err != nil {
+		return err
+	}
+	s.invalidateQueueCache()
+	return nil
 }
 
 func (s *Service) Next(ctx context.Context) error {
@@ -172,7 +197,11 @@ func (s *Service) Next(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return s.client.Next(ctx, deviceID)
+	if err := s.client.Next(ctx, deviceID); err != nil {
+		return err
+	}
+	s.invalidateQueueCache()
+	return nil
 }
 
 func (s *Service) Prev(ctx context.Context) error {
@@ -180,7 +209,11 @@ func (s *Service) Prev(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return s.client.Previous(ctx, deviceID)
+	if err := s.client.Previous(ctx, deviceID); err != nil {
+		return err
+	}
+	s.invalidateQueueCache()
+	return nil
 }
 
 func (s *Service) GetPlaybackState(ctx context.Context) (PlaybackState, error) {
@@ -206,10 +239,18 @@ func (s *Service) GetPlaybackState(ctx context.Context) (PlaybackState, error) {
 		CurrentlyPlaying: state.CurrentlyPlayingType,
 	}
 
-	queue, err := s.client.GetQueue(ctx)
-	if err == nil && len(queue.Queue) > 0 {
-		playback.NextItemName = queue.Queue[0].Name
-		playback.NextArtistName = strings.Join(artistNames(queue.Queue[0].Artists), ", ")
+	if nextItemName, nextArtistName, ok := s.getCachedQueue(playback.ItemURI, playback.Device.ID); ok {
+		playback.NextItemName = nextItemName
+		playback.NextArtistName = nextArtistName
+	} else {
+		queue, err := s.client.GetQueue(ctx)
+		if err == nil {
+			if len(queue.Queue) > 0 {
+				playback.NextItemName = queue.Queue[0].Name
+				playback.NextArtistName = strings.Join(artistNames(queue.Queue[0].Artists), ", ")
+			}
+			s.storeQueueCache(playback.ItemURI, playback.Device.ID, playback.NextItemName, playback.NextArtistName)
+		}
 	}
 	if playback.Device.ID != "" {
 		s.rememberLastDevice(playback.Device, false)
@@ -266,6 +307,7 @@ func (s *Service) SetDeviceByID(ctx context.Context, id string) error {
 	for _, device := range devices {
 		if device.ID == id {
 			s.cfg.PreferredDeviceID = id
+			s.invalidateQueueCache()
 			s.rememberLastDevice(device, true)
 			return nil
 		}
@@ -286,6 +328,7 @@ func (s *Service) SetDeviceByName(ctx context.Context, substring string) (Device
 	}
 
 	s.cfg.PreferredDeviceID = match.ID
+	s.invalidateQueueCache()
 	s.rememberLastDevice(match, true)
 	return match, nil
 }
@@ -326,6 +369,7 @@ func (s *Service) StartLocalPlayer(ctx context.Context) error {
 	}
 
 	s.cfg.PreferredDeviceID = device.ID
+	s.invalidateQueueCache()
 	s.rememberLastDevice(device, true)
 	return nil
 }
@@ -341,6 +385,7 @@ func (s *Service) UseLocalPlayer(ctx context.Context) error {
 	}
 	if status.Device.ID != "" {
 		s.cfg.PreferredDeviceID = status.Device.ID
+		s.invalidateQueueCache()
 		s.rememberLastDevice(Device{
 			ID:   status.Device.ID,
 			Name: status.Device.Name,
@@ -356,6 +401,7 @@ func (s *Service) ResetLocalPlayer(ctx context.Context) error {
 		return err
 	}
 	s.cfg.PreferredDeviceID = ""
+	s.invalidateQueueCache()
 	if strings.EqualFold(s.cfg.LastUsedDevice.Name, s.cfg.LocalPlayer.DeviceName) {
 		s.cfg.LastUsedDevice = config.LastDevice{}
 	}
@@ -527,6 +573,36 @@ func (s *Service) rememberLastDevice(device Device, selected bool) {
 		Selected: selected,
 	}
 	_ = config.Save(s.cfg)
+}
+
+func (s *Service) getCachedQueue(trackURI string, deviceID string) (string, string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if !s.queueCache.valid || s.queueCache.trackURI != trackURI || s.queueCache.deviceID != deviceID {
+		return "", "", false
+	}
+	return s.queueCache.nextItemName, s.queueCache.nextArtistName, true
+}
+
+func (s *Service) storeQueueCache(trackURI string, deviceID string, nextItemName string, nextArtistName string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.queueCache = queueCache{
+		trackURI:       trackURI,
+		deviceID:       deviceID,
+		nextItemName:   nextItemName,
+		nextArtistName: nextArtistName,
+		valid:          true,
+	}
+}
+
+func (s *Service) invalidateQueueCache() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.queueCache = queueCache{}
 }
 
 func (s *Service) noDeviceError(ctx context.Context) error {
