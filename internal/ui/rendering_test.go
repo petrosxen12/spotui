@@ -132,6 +132,39 @@ func TestResultDelegateTruncatesLongRows(t *testing.T) {
 	}
 }
 
+func TestItemsFromResultsDropsEntriesWithoutVisibleTitles(t *testing.T) {
+	items := itemsFromResults(app.Results{
+		Tracks: []app.SearchItem{
+			{Name: "Visible Track", URI: "spotify:track:1"},
+			{Name: " \t ", URI: "spotify:track:2"},
+		},
+		Playlists: []app.SearchItem{
+			{Name: "\u200d\ufe0f", URI: "spotify:playlist:1"},
+			{Name: "Visible Playlist", URI: "spotify:playlist:2"},
+		},
+	})
+
+	if len(items) != 2 {
+		t.Fatalf("itemsFromResults() len = %d, want 2", len(items))
+	}
+
+	track, ok := items[0].(resultItem)
+	if !ok {
+		t.Fatalf("items[0] type = %T, want resultItem", items[0])
+	}
+	if track.title != "Visible Track" {
+		t.Fatalf("track title = %q, want %q", track.title, "Visible Track")
+	}
+
+	playlist, ok := items[1].(resultItem)
+	if !ok {
+		t.Fatalf("items[1] type = %T, want resultItem", items[1])
+	}
+	if playlist.title != "Visible Playlist" {
+		t.Fatalf("playlist title = %q, want %q", playlist.title, "Visible Playlist")
+	}
+}
+
 func TestFooterShowsLocalPlayerStatus(t *testing.T) {
 	m := newModel(nil)
 	m.width = 120

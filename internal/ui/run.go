@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -18,8 +20,21 @@ const (
 func Run(service app.PlayerService) error {
 	m := newModel(service)
 	program := tea.NewProgram(m, tea.WithAltScreen())
-	_, err := program.Run()
-	return err
+	_, runErr := program.Run()
+	stopErr := stopManagedLocalPlayer(service)
+	if runErr != nil {
+		return errors.Join(runErr, stopErr)
+	}
+	return stopErr
+}
+
+func stopManagedLocalPlayer(service app.PlayerService) error {
+	if service == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return service.StopLocalPlayer(ctx)
 }
 
 func newModel(service app.PlayerService) model {
