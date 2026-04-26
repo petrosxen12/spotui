@@ -107,11 +107,12 @@ func (m model) View() string {
 
 	mainContent := m.mainContent(layout)
 	if layout.railEnabled {
+		rail := contextRailStyle.Width(layout.railWidth).MaxHeight(lipgloss.Height(mainContent)).Render(m.contextRailView(layout))
 		mainContent = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			mainContent,
 			"   ",
-			contextRailStyle.Width(layout.railWidth).Render(m.contextRailView(layout)),
+			rail,
 		)
 	}
 

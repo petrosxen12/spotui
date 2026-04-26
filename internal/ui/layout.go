@@ -75,14 +75,6 @@ func (m model) layoutMetrics() layoutMetrics {
 	}
 
 	layoutForRail := m.layoutMetricsForWidth(bodyWidth, paddingX, paddingY, heightMode, true)
-	if layoutForRail.railEnabled {
-		mainHeight := lipgloss.Height(m.mainContent(layoutForRail))
-		railHeight := lipgloss.Height(contextRailStyle.Width(layoutForRail.railWidth).Render(m.contextRailView(layoutForRail)))
-		if railHeight > mainHeight {
-			return m.layoutMetricsForWidth(bodyWidth, paddingX, paddingY, heightMode, false)
-		}
-	}
-
 	return layoutForRail
 }
 

@@ -125,7 +125,7 @@ func TestLowHeightPanelsCollapseChrome(t *testing.T) {
 	}
 }
 
-func TestWideCompactHeightDisablesRailWhenContextWouldOverflow(t *testing.T) {
+func TestWideCompactHeightKeepsRailWhenContextWouldOverflow(t *testing.T) {
 	m := newModel(nil)
 	m.width = 200
 	m.height = 22
@@ -152,13 +152,19 @@ func TestWideCompactHeightDisablesRailWhenContextWouldOverflow(t *testing.T) {
 	m.list.Select(0)
 
 	layout := m.layoutMetrics()
-	if layout.railEnabled {
-		t.Fatal("expected layout to disable rail when wide compact-height search context would overflow")
+	if !layout.railEnabled {
+		t.Fatal("expected layout to keep the context rail enabled on wide compact-height terminals")
 	}
 
 	view := m.View()
 	if !strings.Contains(view, "spotui") {
 		t.Fatal("expected playbar to remain visible in rendered view")
+	}
+	if !strings.Contains(view, "Context") {
+		t.Fatal("expected rendered view to include the context rail")
+	}
+	if got := strings.Count(view, "\n") + 1; got > m.height {
+		t.Fatalf("rendered view height = %d, want <= %d", got, m.height)
 	}
 }
 
