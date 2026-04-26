@@ -248,18 +248,7 @@ func doTokenRequest(ctx context.Context, form url.Values) (*Token, error) {
 		return nil, fmt.Errorf("read token response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		var apiErr struct {
-			Error            string `json:"error"`
-			ErrorDescription string `json:"error_description"`
-		}
-		_ = json.Unmarshal(body, &apiErr)
-		if apiErr.ErrorDescription != "" {
-			return nil, fmt.Errorf("Spotify token error: %s", apiErr.ErrorDescription)
-		}
-		if apiErr.Error != "" {
-			return nil, fmt.Errorf("Spotify token error: %s", apiErr.Error)
-		}
-		return nil, fmt.Errorf("Spotify token error: %s", strings.TrimSpace(string(body)))
+		return nil, classifyTokenError(body)
 	}
 
 	var payload struct {
@@ -283,6 +272,24 @@ func doTokenRequest(ctx context.Context, form url.Values) (*Token, error) {
 		Scope:        payload.Scope,
 		ExpiresAt:    time.Now().UTC().Add(time.Duration(payload.ExpiresIn) * time.Second),
 	}, nil
+}
+
+func classifyTokenError(body []byte) error {
+	var apiErr struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+	_ = json.Unmarshal(body, &apiErr)
+
+	message := strings.TrimSpace(string(body))
+	switch {
+	case apiErr.ErrorDescription != "":
+		message = apiErr.ErrorDescription
+	case apiErr.Error != "":
+		message = apiErr.Error
+	}
+
+	return spoterr.New(spoterr.KindAuthExpired, "Spotify token error: "+message)
 }
 
 func buildAuthURL(clientID, redirectURI, codeChallenge, state string) string {
