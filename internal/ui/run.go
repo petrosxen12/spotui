@@ -59,7 +59,6 @@ func newModel(service app.PlayerService) model {
 		input:            input,
 		inputFocused:     true,
 		connectionStatus: "Connecting to Spotify...",
-		lastAction:       "Search for something or use slash commands from the command dock.",
 		listMode:         listModeSearch,
 		pollEvery:        playbackPollIdle,
 		accentColorCache: make(map[string]string),

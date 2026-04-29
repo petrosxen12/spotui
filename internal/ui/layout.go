@@ -83,7 +83,7 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 	mainWidth := bodyWidth
 	railEnabled := false
 	railWidth := 0
-	if allowRail && bodyWidth >= 118 && heightMode != heightModeMinimal && m.height >= 20 {
+	if allowRail && m.shouldShowContextRail() && bodyWidth >= 118 && heightMode != heightModeMinimal && m.height >= 20 {
 		candidateRailWidth := clampInt(bodyWidth/5, 22, 28)
 		candidateMainWidth := bodyWidth - candidateRailWidth - 3
 		if candidateMainWidth >= 72 {
@@ -182,6 +182,10 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 		footerShowStatus:    footerShowStatus,
 		footerShowHints:     footerShowHints,
 	}
+}
+
+func (m model) shouldShowContextRail() bool {
+	return len(m.selectedContextLines(28)) > 0
 }
 
 func classifyHeightMode(height int) layoutHeightMode {
