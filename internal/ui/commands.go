@@ -248,6 +248,12 @@ func pollPlaybackCmd(interval time.Duration) tea.Cmd {
 	})
 }
 
+func bootAnimationCmd() tea.Cmd {
+	return tea.Tick(180*time.Millisecond, func(time.Time) tea.Msg {
+		return bootAnimationMsg{}
+	})
+}
+
 func playSelectionCmd(service app.PlayerService, item resultItem) tea.Cmd {
 	return func() tea.Msg {
 		var err error

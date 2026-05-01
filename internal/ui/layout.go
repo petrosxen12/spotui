@@ -75,14 +75,6 @@ func (m model) layoutMetrics() layoutMetrics {
 	}
 
 	layoutForRail := m.layoutMetricsForWidth(bodyWidth, paddingX, paddingY, heightMode, true)
-	if layoutForRail.railEnabled {
-		mainHeight := lipgloss.Height(m.mainContent(layoutForRail))
-		railHeight := lipgloss.Height(contextRailStyle.Width(layoutForRail.railWidth).Render(m.contextRailView(layoutForRail)))
-		if railHeight > mainHeight {
-			return m.layoutMetricsForWidth(bodyWidth, paddingX, paddingY, heightMode, false)
-		}
-	}
-
 	return layoutForRail
 }
 
@@ -91,7 +83,7 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 	mainWidth := bodyWidth
 	railEnabled := false
 	railWidth := 0
-	if allowRail && bodyWidth >= 118 && heightMode != heightModeMinimal && m.height >= 20 {
+	if allowRail && m.shouldShowContextRail() && bodyWidth >= 118 && heightMode != heightModeMinimal && m.height >= 20 {
 		candidateRailWidth := clampInt(bodyWidth/5, 22, 28)
 		candidateMainWidth := bodyWidth - candidateRailWidth - 3
 		if candidateMainWidth >= 72 {
@@ -190,6 +182,10 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 		footerShowStatus:    footerShowStatus,
 		footerShowHints:     footerShowHints,
 	}
+}
+
+func (m model) shouldShowContextRail() bool {
+	return len(m.selectedContextLines(28)) > 0
 }
 
 func classifyHeightMode(height int) layoutHeightMode {

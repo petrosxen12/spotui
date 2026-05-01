@@ -73,8 +73,8 @@ func TestCompactPlaybarVeryNarrowWidthStaysBounded(t *testing.T) {
 	playbar := m.playbarView(layout)
 	lines := strings.Split(playbar, "\n")
 
-	if len(lines) != 2 {
-		t.Fatalf("expected very narrow compact playbar to collapse to 2 lines, got %d", len(lines))
+	if len(lines) != 3 {
+		t.Fatalf("expected very narrow compact playbar to collapse to 3 lines, got %d", len(lines))
 	}
 	for _, line := range lines {
 		if lipgloss.Width(line) > layout.bodyWidth {
@@ -186,5 +186,128 @@ func TestFooterShowsLocalPlayerStatus(t *testing.T) {
 	}
 	if !strings.Contains(footer, "spotui-speaker") {
 		t.Fatalf("expected footer to include local device name, got %q", footer)
+	}
+	if strings.Count(footer, "\n") > 1 {
+		t.Fatalf("expected compact footer status band, got %q", footer)
+	}
+	if strings.Contains(footer, m.connectionStatus) {
+		t.Fatalf("expected footer to omit connection status, got %q", footer)
+	}
+}
+
+func TestNewModelDoesNotExposeDefaultSuccessAction(t *testing.T) {
+	m := newModel(nil)
+	m.width = 120
+	m.height = 26
+	m.connectionStatus = "Connected as tester"
+
+	layout := m.layoutMetrics()
+	footer := m.footerPanel(layout.mainWidth, layout)
+
+	if strings.Contains(footer, "Search for something or use slash commands from the command dock.") {
+		t.Fatalf("expected footer to omit the old default action copy, got %q", footer)
+	}
+}
+
+func TestEmptyResultsHintIsShortAndDirective(t *testing.T) {
+	m := newModel(nil)
+
+	if got := m.emptyResultsHint(); got != "" {
+		t.Fatalf("emptyResultsHint() = %q, want empty string", got)
+	}
+}
+
+func TestEmptyResultsViewIsBlankWithoutContext(t *testing.T) {
+	m := newModel(nil)
+
+	rendered := m.emptyResultsView(60)
+	if rendered != "" {
+		t.Fatalf("expected empty results view to stay blank without extra context, got %q", rendered)
+	}
+}
+
+func TestEmptySearchResultsPanelUsesTransientLoadingHeader(t *testing.T) {
+	m := newModel(nil)
+	m.width = 120
+	m.height = 26
+	m.bootFrames = 1
+
+	layout := m.layoutMetrics()
+	panel := m.resultsPanel(layout.mainWidth, layout)
+
+	if strings.Contains(panel, "No results yet") {
+		t.Fatalf("expected empty search panel to omit the no-results count label, got %q", panel)
+	}
+	if !strings.Contains(panel, "•") {
+		t.Fatalf("expected empty search panel to show the boot loading header, got %q", panel)
+	}
+}
+
+func TestEmptySearchResultsPanelGoesQuietAfterBoot(t *testing.T) {
+	m := newModel(nil)
+	m.width = 120
+	m.height = 26
+	m.bootAnimationDone = true
+
+	layout := m.layoutMetrics()
+	panel := m.resultsPanel(layout.mainWidth, layout)
+
+	if strings.Contains(panel, "Search") {
+		t.Fatalf("expected empty search panel to omit persistent search copy, got %q", panel)
+	}
+	if strings.TrimSpace(panel) != "" {
+		t.Fatalf("expected empty search panel to be visually quiet after boot, got %q", panel)
+	}
+}
+
+func TestFooterHidesHintsWhileBannerIsVisible(t *testing.T) {
+	m := newModel(nil)
+	m.width = 120
+	m.height = 26
+	m.connectionStatus = "Connected as tester"
+	m.bannerText = "Spotify login expired. Run `spotui login` again."
+	m.bannerIsError = true
+
+	layout := m.layoutMetrics()
+	footer := m.footerPanel(layout.mainWidth, layout)
+
+	if !strings.Contains(footer, m.bannerText) {
+		t.Fatalf("expected footer to include banner text, got %q", footer)
+	}
+	if strings.Contains(footer, "tab focus") {
+		t.Fatalf("expected footer hints to be suppressed while a banner is visible, got %q", footer)
+	}
+}
+
+func TestPlaybarStatusRowShowsConnectedUser(t *testing.T) {
+	m := newModel(nil)
+	m.connectionStatus = "Connected as Petros Xen (11124806036)"
+
+	row := m.playbarStatusRow(120, "idle", "")
+	if !strings.Contains(row, "Petros Xen") {
+		t.Fatalf("expected status row to include the connected user, got %q", row)
+	}
+}
+
+func TestPlaybarStatusRowShowsOfflineStateWhenNotConnected(t *testing.T) {
+	m := newModel(nil)
+	m.connectionStatus = "not logged in; run `spotui login` first"
+
+	row := m.playbarStatusRow(120, "idle", "")
+	if !strings.Contains(row, "offline") {
+		t.Fatalf("expected status row to include offline state, got %q", row)
+	}
+}
+
+func TestIdlePlaybarOmitsIdleSearchSubtitle(t *testing.T) {
+	m := newModel(nil)
+	m.width = 120
+	m.height = 26
+
+	layout := m.layoutMetrics()
+	playbar := m.playbarView(layout)
+
+	if strings.Contains(playbar, "Search tracks or playlists to start playback.") {
+		t.Fatalf("expected idle playbar to omit the search subtitle, got %q", playbar)
 	}
 }

@@ -13,9 +13,6 @@ var (
 	pageStyle = lipgloss.NewStyle().
 			Padding(0, 1)
 
-	heroStyle = lipgloss.NewStyle().
-			MarginBottom(1)
-
 	playbarStyle = lipgloss.NewStyle().
 			MarginBottom(1)
 
@@ -32,12 +29,19 @@ var (
 			Foreground(lipgloss.AdaptiveColor{Light: "#66706B", Dark: "#8A948F"}).
 			Bold(true)
 
+	statusRowStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#7A837F", Dark: "#8E9793"})
+
 	kickerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#6E7772", Dark: "#737C78"})
 
 	titleStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#111513", Dark: "#F3F6F4"}).
 			Bold(true)
+
+	nowPlayingHeroStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#111513", Dark: "#F6F8F7"}).
+				Bold(true)
 
 	subtitleStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#505854", Dark: "#C7CECA"})
@@ -107,11 +111,12 @@ func (m model) View() string {
 
 	mainContent := m.mainContent(layout)
 	if layout.railEnabled {
+		rail := contextRailStyle.Width(layout.railWidth).MaxHeight(lipgloss.Height(mainContent)).Render(m.contextRailView(layout))
 		mainContent = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			mainContent,
 			"   ",
-			contextRailStyle.Width(layout.railWidth).Render(m.contextRailView(layout)),
+			rail,
 		)
 	}
 
@@ -165,29 +170,24 @@ func (m model) playbarView(layout layoutMetrics) string {
 		title = m.playback.ItemName
 	}
 
-	artist := "Search for a track or choose a result to start playback."
+	artist := ""
 	if m.playback.ArtistName != "" {
 		artist = m.playback.ArtistName
 	}
 
-	device := "No active device"
+	device := ""
 	if m.playback.Device.Name != "" {
 		device = m.playback.Device.Name
 	}
 
 	progress := m.progressBar(layout.playbarProgressLen)
 	timing := formatDuration(m.playback.Progress) + " / " + formatDuration(m.playback.Duration)
-
-	leftPrefix := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		eyebrowStyle.Render("spotui"),
-		"  ",
-		m.playingStatusStyle().Render("● "+strings.ToLower(status)),
-	)
 	progressGroup := m.playbarProgressView(layout, progress, timing)
+	statusRow := m.playbarStatusRow(layout.bodyWidth, strings.ToLower(status), device)
 	if layout.playbarMinimal {
-		primary := m.playbarPrimaryLine(layout.bodyWidth, leftPrefix, title)
+		primary := m.playbarPrimaryLine(layout.bodyWidth, title)
 		return strings.Join([]string{
+			statusRow,
 			primary,
 			progressGroup,
 		}, "\n")
@@ -195,71 +195,88 @@ func (m model) playbarView(layout layoutMetrics) string {
 	if layout.playbarCompact {
 		if layout.bodyWidth < 36 {
 			return strings.Join([]string{
-				m.playbarPrimaryLine(layout.bodyWidth, leftPrefix, title),
+				statusRow,
+				m.playbarPrimaryLine(layout.bodyWidth, title),
 				progressGroup,
 			}, "\n")
 		}
-		secondaryParts := []string{artist, device}
-		if m.playback.NextItemName != "" {
+		secondaryParts := make([]string, 0, 3)
+		if artist != "" {
+			secondaryParts = append(secondaryParts, artist)
+		}
+		if device != "" {
+			secondaryParts = append(secondaryParts, device)
+		}
+		if m.playback.NextItemName != "" && layout.bodyWidth >= 52 {
 			secondaryParts = append(secondaryParts, "next "+m.playback.NextItemName)
 		}
-		secondary := joinAndTruncate(layout.bodyWidth, "  ·  ", secondaryParts...)
-		return strings.Join([]string{
-			m.playbarPrimaryLine(layout.bodyWidth, leftPrefix, title),
-			subtitleStyle.Render(secondary),
+		lines := []string{
+			statusRow,
+			m.playbarPrimaryLine(layout.bodyWidth, title),
 			progressGroup,
-		}, "\n")
-	}
-
-	minTitleWidth := 12
-	gapWidth := 2
-	leftMeta := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		subtitleStyle.Render(artist),
-		"  ·  ",
-		metaPillStyle.Render(device),
-	)
-	availableTitleWidth := layout.bodyWidth - lipgloss.Width(leftPrefix) - lipgloss.Width(leftMeta) - lipgloss.Width(progressGroup) - (gapWidth * 3)
-	if availableTitleWidth >= minTitleWidth {
-		left := lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			leftPrefix,
-			"  ",
-			m.nowPlayingTitleStyle().Render(truncateText(title, availableTitleWidth)),
-			"  ·  ",
-			leftMeta,
-		)
-		gap := layout.bodyWidth - lipgloss.Width(left) - lipgloss.Width(progressGroup)
-		if gap >= gapWidth {
-			return lipgloss.JoinHorizontal(lipgloss.Left, left, strings.Repeat(" ", gap), progressGroup)
 		}
+		if len(secondaryParts) > 0 {
+			lines = append(lines[0:2], append([]string{subtitleStyle.Render(joinAndTruncate(layout.bodyWidth, "  ·  ", secondaryParts...))}, lines[2:]...)...)
+		}
+		return strings.Join(lines, "\n")
 	}
 
-	left := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		leftPrefix,
-		"  ",
-		m.nowPlayingTitleStyle().Render(truncateText(title, maxInt(1, layout.bodyWidth-lipgloss.Width(leftPrefix)-2))),
-	)
-	right := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		subtitleStyle.Render(truncateText(artist, maxInt(1, layout.bodyWidth))),
-		"  ·  ",
-		metaPillStyle.Render(truncateText(device, maxInt(1, layout.bodyWidth/3))),
-		"  ",
+	titleWidth := maxInt(1, layout.bodyWidth-lipgloss.Width(progressGroup)-2)
+	titleText := m.nowPlayingTitleStyle().Render(truncateText(title, titleWidth))
+	if titleWidth >= 18 {
+		titleLine := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			titleText,
+			strings.Repeat(" ", maxInt(2, layout.bodyWidth-lipgloss.Width(titleText)-lipgloss.Width(progressGroup))),
+			progressGroup,
+		)
+		metaParts := make([]string, 0, 3)
+		if artist != "" {
+			metaParts = append(metaParts, artist)
+		}
+		if device != "" {
+			metaParts = append(metaParts, device)
+		}
+		if m.playback.NextItemName != "" {
+			metaParts = append(metaParts, "next "+m.playback.NextItemName)
+		}
+		lines := []string{
+			statusRow,
+			titleLine,
+		}
+		if len(metaParts) > 0 {
+			lines = append(lines, subtitleStyle.Render(joinAndTruncate(layout.bodyWidth, "  ·  ", metaParts...)))
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	lines := []string{
+		statusRow,
+		m.playbarPrimaryLine(layout.bodyWidth, title),
 		progressGroup,
-	)
-	return heroStyle.Render(strings.Join([]string{left, right}, "\n"))
+	}
+	if artist != "" {
+		lines = append(lines[0:2], append([]string{subtitleStyle.Render(truncateText(artist, layout.bodyWidth))}, lines[2:]...)...)
+	}
+	return strings.Join(lines, "\n")
 }
 
-func (m model) playbarPrimaryLine(width int, leftPrefix string, title string) string {
-	titleWidth := maxInt(1, width-lipgloss.Width(leftPrefix)-2)
-	return lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		leftPrefix,
-		"  ",
-		m.nowPlayingTitleStyle().Render(truncateText(title, titleWidth)),
-	)
+func (m model) playbarStatusRow(width int, status string, device string) string {
+	parts := []string{
+		eyebrowStyle.Render("spotui"),
+		m.playingStatusStyle().Render("● " + status),
+	}
+	if connection := m.connectionBadge(width); connection != "" {
+		parts = append(parts, connection)
+	}
+	if device != "" {
+		parts = append(parts, truncateText(device, maxInt(10, width/4)))
+	}
+	return statusRowStyle.Render(joinAndTruncate(width, "  ·  ", parts...))
+}
+
+func (m model) playbarPrimaryLine(width int, title string) string {
+	return nowPlayingHeroStyle.Copy().Width(width).Render(truncateText(title, width))
 }
 
 func (m model) playbarProgressView(layout layoutMetrics, progress string, timing string) string {
@@ -300,19 +317,24 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 	case listModeSearch:
 		if m.query != "" {
 			header = fmt.Sprintf("Results for %q", m.query)
+		} else if m.resultCount == 0 && !m.bootAnimationDone {
+			header = m.bootLoadingText()
+		} else if m.resultCount == 0 && m.bootAnimationDone {
+			header = ""
 		}
 	}
 
-	countLabel := "No items yet"
+	countLabel := ""
 	switch m.listMode {
 	case listModeDevices:
 		countLabel = fmt.Sprintf("%d devices", m.resultCount)
 	case listModeHelp:
 		countLabel = fmt.Sprintf("%d commands", m.resultCount)
 	case listModeSearch:
-		countLabel = "No results yet"
 		if m.resultCount > 0 {
 			countLabel = fmt.Sprintf("%d items", m.resultCount)
+		} else if m.query != "" {
+			countLabel = "No results yet"
 		}
 	}
 
@@ -324,24 +346,33 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 		case listModeHelp:
 			body = subtitleStyle.Render("Type /help to load the command list.")
 		default:
-			body = subtitleStyle.Render(m.emptyResultsHint())
+			body = m.emptyResultsView(width)
 		}
 	}
 
 	header = truncateText(header, width)
 	countLabel = truncateText(countLabel, width)
 
-	lines := []string{eyebrowStyle.Render(header)}
+	lines := make([]string, 0, 4)
+	if header != "" {
+		lines = append(lines, eyebrowStyle.Render(header))
+	}
 	progressText := strings.TrimSpace(m.listProgressText())
-	if progressText != "" {
+	if countLabel != "" && progressText != "" {
 		lines = append(lines, kickerStyle.Render(joinAndTruncate(width, "  ·  ", countLabel, progressText)))
-	} else {
+	} else if countLabel != "" {
 		lines = append(lines, kickerStyle.Render(countLabel))
+	}
+	if body == "" {
+		return style.Width(width).Render(strings.Join(lines, "\n"))
 	}
 	if layout.heightMode == heightModeMinimal {
 		lines = append(lines, body)
 	} else {
-		lines = append(lines, "", body)
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, body)
 	}
 	return style.Width(width).Render(strings.Join(lines, "\n"))
 }
@@ -359,18 +390,13 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 		statusTone = successStyle.Copy().Foreground(lipgloss.Color(m.vividAccentColor()))
 	}
 
-	lines := []string{infoStyle.Render(truncateText(m.connectionStatus, width))}
+	statusParts := make([]string, 0, 1)
 	if line := m.localPlayer.statusLine(); line != "" && (layout.footerShowStatus || m.playback.Device.ID == "") {
-		tone := infoStyle
-		switch m.localPlayer.statusTone() {
-		case "success":
-			tone = successStyle.Copy().Foreground(lipgloss.Color(m.vividAccentColor()))
-		case "error":
-			tone = errorStyle
-		case "subtle":
-			tone = commandHintStyle
-		}
-		lines = append(lines, tone.Render(truncateText(line, width)))
+		statusParts = append(statusParts, line)
+	}
+	lines := make([]string, 0, 3)
+	if len(statusParts) > 0 {
+		lines = append(lines, commandHintStyle.Render(joinAndTruncate(width, "  ·  ", statusParts...)))
 	}
 	if m.bannerText != "" {
 		tone := commandHintStyle
@@ -382,7 +408,7 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 	if layout.footerShowStatus && currentAction != "" {
 		lines = append(lines, statusTone.Render(truncateText(currentAction, width)))
 	}
-	if layout.footerShowHints {
+	if layout.footerShowHints && m.bannerText == "" {
 		lines = append(lines, commandHintStyle.Render(truncateText("tab focus  ·  enter play  ·  / commands  ·  q quit", width)))
 	}
 	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
@@ -451,17 +477,59 @@ func (m model) contextRailView(layout layoutMetrics) string {
 func (m model) emptyResultsHint() string {
 	if m.playback.Device.ID == "" && m.localPlayer.supported && (m.localPlayer.process == "running" || m.localPlayer.process == "starting") {
 		if m.localPlayer.device != "" {
-			return "Type a query below. Waiting for local player " + m.localPlayer.device + " to become the active output."
+			return "Waiting for " + m.localPlayer.device + " to become the active output."
 		}
-		return "Type a query below. Waiting for the local player to become the active output."
+		return "Waiting for the local player to become the active output."
 	}
 	if m.playback.Device.ID == "" && m.localPlayer.supported && m.localPlayer.binaryAvailable {
-		return "Type a query below, or run /local start to boot the lightweight local player."
+		return "Run /local start to use the local player."
 	}
 	if m.playback.Device.ID == "" && m.localPlayer.supported && !m.localPlayer.binaryAvailable && m.localPlayer.message != "" {
-		return "Type a query below. Local player is unavailable: " + m.localPlayer.message
+		return "Local player unavailable: " + m.localPlayer.message
 	}
-	return "Type a query below and let the list settle into view."
+	return ""
+}
+
+func (m model) emptyResultsView(width int) string {
+	secondary := m.emptyResultsHint()
+	if secondary == "" {
+		return ""
+	}
+	return subtitleStyle.Render(truncateText(secondary, width))
+}
+
+func (m model) connectionBadge(width int) string {
+	connected, label := parseConnectionStatus(m.connectionStatus)
+	if label == "" {
+		return ""
+	}
+	if connected {
+		return successStyle.Copy().
+			Foreground(spotifyGreen).
+			Render("● " + truncateText(label, maxInt(12, width/5)))
+	}
+	return errorStyle.Render("● " + truncateText(label, maxInt(12, width/6)))
+}
+
+func parseConnectionStatus(raw string) (bool, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false, ""
+	}
+	const prefix = "Connected as "
+	if strings.HasPrefix(raw, prefix) {
+		label := strings.TrimPrefix(raw, prefix)
+		if idx := strings.Index(label, " ("); idx > 0 {
+			label = label[:idx]
+		}
+		return true, strings.TrimSpace(label)
+	}
+	return false, "offline"
+}
+
+func (m model) bootLoadingText() string {
+	frames := []string{"·  ·  ·", "•  ·  ·", "•  •  ·", "•  •  •"}
+	return frames[m.bootFrames%len(frames)]
 }
 
 func (m model) commandDockView(layout layoutMetrics) string {
@@ -546,7 +614,7 @@ func (m model) playingStatusStyle() lipgloss.Style {
 
 func (m model) nowPlayingTitleStyle() lipgloss.Style {
 	if m.playback.IsPlaying && m.accentColor != "" {
-		return titleStyle.Copy().Foreground(lipgloss.Color(m.accentColor))
+		return nowPlayingHeroStyle.Copy().Foreground(lipgloss.Color(m.accentColor))
 	}
-	return titleStyle
+	return nowPlayingHeroStyle
 }

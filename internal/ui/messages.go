@@ -59,3 +59,5 @@ type accentColorMsg struct {
 }
 
 type pollTickMsg struct{}
+
+type bootAnimationMsg struct{}

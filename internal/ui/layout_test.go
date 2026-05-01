@@ -31,7 +31,7 @@ func TestClassifyHeightMode(t *testing.T) {
 func TestLayoutMetricsShortHeightModes(t *testing.T) {
 	m := newModel(nil)
 
-	t.Run("compact height keeps rail on wide terminals but hides footer hints", func(t *testing.T) {
+	t.Run("compact height hides rail without a meaningful selection and hides footer hints", func(t *testing.T) {
 		m.width = 140
 		m.height = 22
 
@@ -40,8 +40,8 @@ func TestLayoutMetricsShortHeightModes(t *testing.T) {
 		if layout.heightMode != heightModeCompact {
 			t.Fatalf("heightMode = %q, want %q", layout.heightMode, heightModeCompact)
 		}
-		if !layout.railEnabled {
-			t.Fatal("expected context rail to remain enabled on wide compact-height terminals")
+		if layout.railEnabled {
+			t.Fatal("expected context rail to stay hidden until a meaningful selection exists")
 		}
 		if layout.footerShowHints {
 			t.Fatal("expected footer hints to be hidden in compact height mode")
@@ -110,8 +110,8 @@ func TestLowHeightPanelsCollapseChrome(t *testing.T) {
 	if strings.Contains(footer, "tab focus") {
 		t.Fatal("expected minimal footer to hide command hints")
 	}
-	if !strings.Contains(footer, m.connectionStatus) {
-		t.Fatal("expected minimal footer to keep connection status")
+	if strings.Contains(footer, m.connectionStatus) {
+		t.Fatal("expected minimal footer to omit connection status after moving it to the top status row")
 	}
 
 	results := m.resultsPanel(layout.mainWidth, layout)
@@ -125,7 +125,7 @@ func TestLowHeightPanelsCollapseChrome(t *testing.T) {
 	}
 }
 
-func TestWideCompactHeightDisablesRailWhenContextWouldOverflow(t *testing.T) {
+func TestWideCompactHeightKeepsRailWhenContextWouldOverflow(t *testing.T) {
 	m := newModel(nil)
 	m.width = 200
 	m.height = 22
@@ -152,13 +152,30 @@ func TestWideCompactHeightDisablesRailWhenContextWouldOverflow(t *testing.T) {
 	m.list.Select(0)
 
 	layout := m.layoutMetrics()
-	if layout.railEnabled {
-		t.Fatal("expected layout to disable rail when wide compact-height search context would overflow")
+	if !layout.railEnabled {
+		t.Fatal("expected layout to keep the context rail enabled on wide compact-height terminals")
 	}
 
 	view := m.View()
 	if !strings.Contains(view, "spotui") {
 		t.Fatal("expected playbar to remain visible in rendered view")
+	}
+	if !strings.Contains(view, "Context") {
+		t.Fatal("expected rendered view to include the context rail")
+	}
+	if got := strings.Count(view, "\n") + 1; got > m.height {
+		t.Fatalf("rendered view height = %d, want <= %d", got, m.height)
+	}
+}
+
+func TestWideIdleLayoutHidesContextRailWithoutSelection(t *testing.T) {
+	m := newModel(nil)
+	m.width = 160
+	m.height = 26
+
+	layout := m.layoutMetrics()
+	if layout.railEnabled {
+		t.Fatal("expected idle layout to hide the context rail without a selection")
 	}
 }
 
