@@ -1,0 +1,20 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#2C313C"/>
+
+  <text x="28" y="140" fill="#F6F8F7" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="18" font-weight="700">Devices</text>
+  <text x="28" y="168" fill="#8E9793" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">2 devices  ·  ••••···· 50%</text>
+
+  <text x="28" y="238" fill="#F6F8F7" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17" font-weight="700">› Bedroom                                                               DEVICE</text>
+  <text x="52" y="266" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Speaker</text>
+
+  <text x="52" y="326" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Everywhere                                                            DEVICE</text>
+  <text x="52" y="354" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Speaker</text>
+
+  <text x="28" y="676" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16">Local player: stopped</text>
+  <text x="28" y="704" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Loaded 2 devices</text>
+  <text x="28" y="732" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16">tab focus  ·  enter play  ·  / commands  ·  q quit</text>
+
+  <line x1="24" y1="818.5" x2="1576" y2="818.5" stroke="#2C9D63"/>
+  <text x="28" y="844" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">›</text>
+  <text x="45" y="844" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Search tracks, playlists, or enter /pause /resume /next /prev /local start</text>
+</svg>

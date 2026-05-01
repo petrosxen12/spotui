@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>spotui Search Results</title>
+  <style>
+    :root {
+      --bg: #2c313c;
+      --fg: #c7ceca;
+      --muted: #8e9793;
+      --quiet: #707874;
+      --accent: #1db954;
+      --line: #49505c;
+      --line-accent: #2c9d63;
+      --title: #f6f8f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      font-family: "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
+      color: var(--fg);
+    }
+    .frame {
+      width: 1600px;
+      height: 900px;
+      margin: 0 auto;
+      padding: 22px 28px;
+      position: relative;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .top-line {
+      position: absolute;
+      left: 0;
+      top: 2px;
+      width: 100%;
+      border-top: 1px solid var(--line);
+    }
+    .status-row {
+      color: var(--muted);
+      font-size: 15px;
+      white-space: pre;
+    }
+    .title-row {
+      margin-top: 8px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .hero-title {
+      color: var(--title);
+      font-size: 19px;
+      font-weight: 700;
+    }
+    .progress {
+      color: var(--muted);
+      font-size: 15px;
+      white-space: pre;
+    }
+    .progress::before {
+      content: "";
+      display: inline-block;
+      width: 260px;
+      margin-right: 18px;
+      border-top: 1px solid #7f8884;
+      vertical-align: middle;
+      transform: translateY(-4px);
+    }
+    .content-title {
+      margin-top: 34px;
+      color: var(--title);
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .content-meta {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 15px;
+      white-space: pre;
+    }
+    .content {
+      margin-top: 30px;
+      display: grid;
+      gap: 26px;
+    }
+    .item {
+      white-space: pre;
+      font-size: 17px;
+      color: var(--fg);
+    }
+    .item .selected {
+      color: var(--title);
+      font-weight: 700;
+    }
+    .dim {
+      color: var(--quiet);
+    }
+    .status {
+      position: absolute;
+      left: 28px;
+      bottom: 108px;
+      color: var(--quiet);
+      font-size: 16px;
+      white-space: pre;
+    }
+    .status-note {
+      position: absolute;
+      left: 28px;
+      bottom: 82px;
+      color: var(--fg);
+      font-size: 17px;
+    }
+    .hints {
+      position: absolute;
+      left: 28px;
+      bottom: 58px;
+      color: var(--quiet);
+      font-size: 16px;
+      white-space: pre;
+    }
+    .dock {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 42px;
+      border-top: 1px solid var(--line-accent);
+      padding-top: 12px;
+      color: var(--quiet);
+      font-size: 17px;
+      white-space: pre-wrap;
+    }
+    .cursor {
+      color: var(--fg);
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="top-line"></div>
+    <div class="status-row">spotui  ·  ● idle  ·  <span style="color: var(--accent)">● Petros Xen</span></div>
+    <div class="title-row">
+      <div class="hero-title">Nothing playing</div>
+      <div class="progress">0:00 / 0:00</div>
+    </div>
+    <div class="content-title">Results for "daft punk"</div>
+    <div class="content-meta">10 items  ·  •······· 12%</div>
+
+    <div class="content">
+      <div class="item"><span class="selected">› Da Funk                                                                TRACK</span>
+  Daft Punk</div>
+      <div class="item">  Giorgio by Moroder                                                     TRACK
+  <span class="dim">Daft Punk</span></div>
+    </div>
+
+    <div class="status">Local player: stopped</div>
+    <div class="status-note">Loaded 10 results for "daft punk"</div>
+    <div class="hints">tab focus  ·  enter play  ·  / commands  ·  q quit</div>
+
+    <div class="dock"><span class="cursor">›</span>Search tracks, playlists, or enter /pause /resume /next /prev /local start</div>
+  </div>
+</body>
+</html>
