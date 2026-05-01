@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>spotui TUI Commands</title>
+  <title>spotui Devices</title>
   <style>
     :root {
       --bg: #2c313c;
@@ -30,22 +30,6 @@
       background: var(--bg);
       overflow: hidden;
     }
-    .command-input {
-      color: var(--selection);
-      font-size: 17px;
-      white-space: pre;
-      margin-bottom: 18px;
-    }
-    .command-input .pipe {
-      color: var(--muted);
-      margin-right: 8px;
-    }
-    .suggestion {
-      color: var(--fg);
-      font-size: 17px;
-      white-space: pre;
-      margin-bottom: 24px;
-    }
     .header {
       color: var(--accent);
       font-size: 18px;
@@ -61,8 +45,8 @@
     .content {
       margin-top: 32px;
       display: grid;
-      grid-template-columns: 1fr 380px;
-      gap: 36px;
+      grid-template-columns: 1fr;
+      gap: 0;
       align-items: start;
     }
     .list {
@@ -77,13 +61,6 @@
     .item .selected {
       color: var(--selection);
       font-weight: 700;
-    }
-    .side {
-      color: var(--quiet);
-      font-size: 16px;
-      white-space: pre-wrap;
-      line-height: 1.5;
-      text-align: right;
     }
     .footer-status {
       position: absolute;
@@ -127,24 +104,20 @@
 </head>
 <body>
   <div class="frame">
-    <div class="command-input"><span class="pipe">│</span>› /help  show command help</div>
-    <div class="suggestion">› /help</div>
-
-    <div class="header">Commands</div>
-    <div class="subheader">14 commands  ·  •······· 7%</div>
+    <div class="header">Devices</div>
+    <div class="subheader">2 devices  ·  ••••···· 50%</div>
 
     <div class="content">
       <div class="list">
-        <div class="item"><span class="selected">› /help                                                                   HELP</span>
-show command help</div>
-        <div class="item">  /local start                                                            HELP
-start the lightweight local player</div>
+        <div class="item"><span class="selected">› Bedroom                                                               DEVICE</span>
+Speaker</div>
+        <div class="item">  Everywhere                                                            DEVICE
+Speaker</div>
       </div>
-      <div class="side"></div>
     </div>
 
     <div class="footer-status">Local player: stopped</div>
-    <div class="footer-label">Command reference</div>
+    <div class="footer-label">Loaded 2 devices</div>
     <div class="footer-hints">tab focus  ·  enter play  ·  / commands  ·  q quit</div>
 
     <div class="dock"><span class="cursor">›</span>Search tracks, playlists, or enter /pause /resume /next /prev /local start</div>

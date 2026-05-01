@@ -4,8 +4,8 @@ Terminal Spotify controller with a CLI and Bubble Tea TUI, plus optional lightwe
 
 ## Screenshots
 
-![spotui TUI overview](./docs/screenshots/tui-overview.svg)
-![spotui command mode](./docs/screenshots/tui-commands.svg)
+![spotui search results](./docs/screenshots/tui-overview.svg)
+![spotui devices view](./docs/screenshots/tui-commands.svg)
 
 ## Features
 

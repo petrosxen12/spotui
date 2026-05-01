@@ -2,18 +2,25 @@
   <rect width="1600" height="900" fill="#2C313C"/>
   <line x1="0" y1="3.5" x2="1600" y2="3.5" stroke="#49505C"/>
 
-  <text x="28" y="38" fill="#8E9793" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">spotui  ·  ● idle  ·  ● offline</text>
+  <text x="28" y="38" fill="#8E9793" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">spotui  ·  ● idle  ·</text>
+  <text x="205" y="38" fill="#1DB954" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">● Petros Xen</text>
   <text x="28" y="68" fill="#F6F8F7" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="19" font-weight="700">Nothing playing</text>
 
   <line x1="1245" y1="56.5" x2="1495" y2="56.5" stroke="#7F8884"/>
   <text x="1515" y="62" fill="#8E9793" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">0:00 / 0:00</text>
 
-  <text x="28" y="128" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">·  ·  ·</text>
+  <text x="28" y="128" fill="#F6F8F7" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="18" font-weight="700">Results for "daft punk"</text>
+  <text x="28" y="154" fill="#8E9793" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">10 items  ·  •······· 12%</text>
 
-  <text x="28" y="182" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Run /local start to use the local player.</text>
-  <text x="28" y="208" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16">Local player: stopped</text>
-  <text x="28" y="234" fill="#F3A1A1" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">request Spotify token: Post "https://accounts.spotify.com/api/token": dial tcp...</text>
-  <text x="28" y="258" fill="#F3A1A1" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">request Spotify token: Post "https://accounts.spotify.com/api/token": dial tcp...</text>
+  <text x="28" y="228" fill="#F6F8F7" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17" font-weight="700">› Da Funk                                                                TRACK</text>
+  <text x="52" y="256" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Daft Punk</text>
+
+  <text x="52" y="316" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Giorgio by Moroder                                                     TRACK</text>
+  <text x="52" y="344" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Daft Punk</text>
+
+  <text x="28" y="676" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16">Local player: stopped</text>
+  <text x="28" y="704" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Loaded 10 results for "daft punk"</text>
+  <text x="28" y="732" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16">tab focus  ·  enter play  ·  / commands  ·  q quit</text>
 
   <line x1="24" y1="818.5" x2="1576" y2="818.5" stroke="#2C9D63"/>
   <text x="28" y="844" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">›</text>

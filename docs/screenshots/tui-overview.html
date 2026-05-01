@@ -2,15 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>spotui TUI Overview</title>
+  <title>spotui Search Results</title>
   <style>
     :root {
       --bg: #2c313c;
       --fg: #c7ceca;
       --muted: #8e9793;
       --quiet: #707874;
-      --accent: #a7f3c4;
-      --error: #f3a1a1;
+      --accent: #1db954;
       --line: #49505c;
       --line-accent: #2c9d63;
       --title: #f6f8f7;
@@ -69,24 +68,57 @@
       vertical-align: middle;
       transform: translateY(-4px);
     }
-    .loading {
+    .content-title {
       margin-top: 34px;
-      color: var(--quiet);
-      font-size: 17px;
+      color: var(--title);
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .content-meta {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 15px;
       white-space: pre;
     }
-    .secondary {
-      margin-top: 34px;
+    .content {
+      margin-top: 30px;
+      display: grid;
+      gap: 26px;
+    }
+    .item {
+      white-space: pre;
+      font-size: 17px;
+      color: var(--fg);
+    }
+    .item .selected {
+      color: var(--title);
+      font-weight: 700;
+    }
+    .dim {
+      color: var(--quiet);
+    }
+    .status {
+      position: absolute;
+      left: 28px;
+      bottom: 108px;
+      color: var(--quiet);
+      font-size: 16px;
+      white-space: pre;
+    }
+    .status-note {
+      position: absolute;
+      left: 28px;
+      bottom: 82px;
       color: var(--fg);
       font-size: 17px;
     }
-    .secondary.muted {
-      margin-top: 8px;
+    .hints {
+      position: absolute;
+      left: 28px;
+      bottom: 58px;
       color: var(--quiet);
-    }
-    .secondary.error {
-      margin-top: 8px;
-      color: var(--error);
+      font-size: 16px;
+      white-space: pre;
     }
     .dock {
       position: absolute;
@@ -108,17 +140,24 @@
 <body>
   <div class="frame">
     <div class="top-line"></div>
-    <div class="status-row">spotui  ·  ● idle  ·  ● offline</div>
+    <div class="status-row">spotui  ·  ● idle  ·  <span style="color: var(--accent)">● Petros Xen</span></div>
     <div class="title-row">
       <div class="hero-title">Nothing playing</div>
       <div class="progress">0:00 / 0:00</div>
     </div>
-    <div class="loading">·  ·  ·</div>
+    <div class="content-title">Results for "daft punk"</div>
+    <div class="content-meta">10 items  ·  •······· 12%</div>
 
-    <div class="secondary">Run /local start to use the local player.</div>
-    <div class="secondary muted">Local player: stopped</div>
-    <div class="secondary error">request Spotify token: Post "https://accounts.spotify.com/api/token": dial tcp...</div>
-    <div class="secondary error">request Spotify token: Post "https://accounts.spotify.com/api/token": dial tcp...</div>
+    <div class="content">
+      <div class="item"><span class="selected">› Da Funk                                                                TRACK</span>
+  Daft Punk</div>
+      <div class="item">  Giorgio by Moroder                                                     TRACK
+  <span class="dim">Daft Punk</span></div>
+    </div>
+
+    <div class="status">Local player: stopped</div>
+    <div class="status-note">Loaded 10 results for "daft punk"</div>
+    <div class="hints">tab focus  ·  enter play  ·  / commands  ·  q quit</div>
 
     <div class="dock"><span class="cursor">›</span>Search tracks, playlists, or enter /pause /resume /next /prev /local start</div>
   </div>
