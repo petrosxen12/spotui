@@ -1,0 +1,21 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#2C313C"/>
+  <line x1="0" y1="3.5" x2="1600" y2="3.5" stroke="#49505C"/>
+
+  <text x="28" y="38" fill="#8E9793" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">spotui  ·  ● idle  ·  ● offline</text>
+  <text x="28" y="68" fill="#F6F8F7" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="19" font-weight="700">Nothing playing</text>
+
+  <line x1="1245" y1="56.5" x2="1495" y2="56.5" stroke="#7F8884"/>
+  <text x="1515" y="62" fill="#8E9793" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">0:00 / 0:00</text>
+
+  <text x="28" y="128" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">·  ·  ·</text>
+
+  <text x="28" y="182" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Run /local start to use the local player.</text>
+  <text x="28" y="208" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="16">Local player: stopped</text>
+  <text x="28" y="234" fill="#F3A1A1" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">request Spotify token: Post "https://accounts.spotify.com/api/token": dial tcp...</text>
+  <text x="28" y="258" fill="#F3A1A1" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="15">request Spotify token: Post "https://accounts.spotify.com/api/token": dial tcp...</text>
+
+  <line x1="24" y1="818.5" x2="1576" y2="818.5" stroke="#2C9D63"/>
+  <text x="28" y="844" fill="#C7CECA" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">›</text>
+  <text x="45" y="844" fill="#707874" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="17">Search tracks, playlists, or enter /pause /resume /next /prev /local start</text>
+</svg>

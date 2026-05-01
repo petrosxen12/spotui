@@ -4,8 +4,8 @@ Terminal Spotify controller with a CLI and Bubble Tea TUI, plus optional lightwe
 
 ## Screenshots
 
-![spotui TUI overview](./docs/screenshots/tui-overview.png)
-![spotui command mode](./docs/screenshots/tui-commands.png)
+![spotui TUI overview](./docs/screenshots/tui-overview.svg)
+![spotui command mode](./docs/screenshots/tui-commands.svg)
 
 ## Features
 
@@ -79,22 +79,26 @@ task build
 
 ## Usage
 
+Use the built-in help for the full command reference:
+
 ```bash
-spotui login --client-id "$SPOTUI_CLIENT_ID"
-spotui me
-spotui devices
-spotui use kitchen
-spotui search "daft punk"
-spotui tui
-spotui local status
-spotui local use
-spotui pause
-spotui resume
-spotui next
-spotui prev
+spotui --help
+spotui [command] --help
 ```
 
-### Play Commands
+Typical flow:
+
+```bash
+spotui login --client-id "$SPOTUI_CLIENT_ID"
+spotui devices
+spotui search "daft punk"
+spotui play track 3
+spotui tui
+```
+
+Use `spotui use <name>` to set a preferred device by substring match, for example `spotui use kitchen`.
+
+### Playing From Search Results
 
 `spotui play` accepts:
 
@@ -139,31 +143,14 @@ On PipeWire desktops, leave `audio_device` empty unless you specifically need to
 
 ## TUI
 
-### Keys
+Run `spotui tui` for the interactive interface.
 
-- `Enter`: search or confirm selection
-- `Tab`: cycle suggestions or switch focus
-- `Up` / `Down`: move through the list
-- `Right` or `Ctrl+Space`: accept suggestion
-- `Esc`: dismiss autocomplete
-- `q` or `Ctrl+C`: quit
+Inside the TUI:
 
-### Slash Commands
-
-- `/help`
-- `/local start`
-- `/local stop`
-- `/local use`
-- `/local status`
-- `/local reset`
-- `/next`
-- `/prev`
-- `/pause`
-- `/resume`
-- `/devices`
-- `/device <name>`
-- `/play <query|index>`
-- `/quit`
+- type a search query and press `Enter`
+- press `/help` for the slash-command list
+- use `Tab` and inline suggestions to complete commands quickly
+- use `q` or `Ctrl+C` to quit
 
 ### Autocomplete
 
@@ -193,14 +180,6 @@ export SPOTUI_REDIRECT_URI=http://127.0.0.1:8888/callback
 - Config dir mode `0700`
 - Token file mode `0600`
 - Atomic temp-file-and-rename writes
-
-## Notes
-
-- Playback polling is adaptive
-- Active playback refreshes about every 1.5s
-- Paused playback backs off to about 4s
-- Repeated failures back off up to 30s
-- Spotify `429` respects `Retry-After`
 
 ## Troubleshooting
 
@@ -259,28 +238,6 @@ Playback control requires Spotify Premium.
 ### Rate limited
 
 `spotui` backs off automatically on `429`.
-
-### Network failure
-
-Check connectivity, VPN or proxy settings, and Spotify API reachability.
-
-## Example
-
-```text
-$ spotui devices
-74c1c2f4b9d9f55f9f3d2f6a9d4c2b1e4f5a6789	MacBook Pro Speakers	Computer	active
-98f18ab7b6f21d0013a987c5fe5a0a3ff0bcb123	Kitchen Nest Hub	Speaker	inactive
-```
-
-```text
-$ spotui search "daft punk"
-Tracks for "daft punk":
-  [1] spotify:track:2cGxRwrMyEAp8dEbuZaVv6 | 2cGxRwrMyEAp8dEbuZaVv6 | One More Time
-  [2] spotify:track:0DiWol3AO6WpXZgp0goxAV | 0DiWol3AO6WpXZgp0goxAV | Get Lucky
-Playlists for "daft punk":
-  [1] spotify:playlist:37i9dQZF1DX1g0iEXLFycr | 37i9dQZF1DX1g0iEXLFycr | This Is Daft Punk
-  [2] spotify:playlist:3C4j8T2L8s3vk0S2lQkR4n | 3C4j8T2L8s3vk0S2lQkR4n | Daft Punk Radio
-```
 
 ## Development
 

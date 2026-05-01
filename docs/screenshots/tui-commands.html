@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>spotui TUI Commands</title>
+  <style>
+    :root {
+      --bg: #2c313c;
+      --fg: #c7ceca;
+      --muted: #8e9793;
+      --quiet: #707874;
+      --accent: #f6f8f7;
+      --panel: #252a34;
+      --line-accent: #2c9d63;
+      --selection: #f6f8f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      font-family: "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
+      color: var(--fg);
+    }
+    .frame {
+      width: 1600px;
+      height: 900px;
+      margin: 0 auto;
+      padding: 22px 28px;
+      position: relative;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .command-input {
+      color: var(--selection);
+      font-size: 17px;
+      white-space: pre;
+      margin-bottom: 18px;
+    }
+    .command-input .pipe {
+      color: var(--muted);
+      margin-right: 8px;
+    }
+    .suggestion {
+      color: var(--fg);
+      font-size: 17px;
+      white-space: pre;
+      margin-bottom: 24px;
+    }
+    .header {
+      color: var(--accent);
+      font-size: 18px;
+      font-weight: 700;
+      white-space: pre;
+    }
+    .subheader {
+      color: var(--muted);
+      font-size: 15px;
+      white-space: pre;
+      margin-top: 6px;
+    }
+    .content {
+      margin-top: 32px;
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 36px;
+      align-items: start;
+    }
+    .list {
+      display: grid;
+      gap: 22px;
+    }
+    .item {
+      white-space: pre;
+      font-size: 17px;
+      color: var(--fg);
+    }
+    .item .selected {
+      color: var(--selection);
+      font-weight: 700;
+    }
+    .side {
+      color: var(--quiet);
+      font-size: 16px;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      text-align: right;
+    }
+    .footer-status {
+      position: absolute;
+      left: 28px;
+      bottom: 108px;
+      color: var(--quiet);
+      font-size: 16px;
+      white-space: pre;
+    }
+    .footer-label {
+      position: absolute;
+      left: 28px;
+      bottom: 82px;
+      color: var(--fg);
+      font-size: 17px;
+    }
+    .footer-hints {
+      position: absolute;
+      left: 28px;
+      bottom: 58px;
+      color: var(--quiet);
+      font-size: 16px;
+      white-space: pre;
+    }
+    .dock {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 16px;
+      border-top: 1px solid var(--line-accent);
+      padding-top: 12px;
+      color: var(--quiet);
+      font-size: 17px;
+      white-space: pre-wrap;
+    }
+    .cursor {
+      color: var(--fg);
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="command-input"><span class="pipe">│</span>› /help  show command help</div>
+    <div class="suggestion">› /help</div>
+
+    <div class="header">Commands</div>
+    <div class="subheader">14 commands  ·  •······· 7%</div>
+
+    <div class="content">
+      <div class="list">
+        <div class="item"><span class="selected">› /help                                                                   HELP</span>
+show command help</div>
+        <div class="item">  /local start                                                            HELP
+start the lightweight local player</div>
+      </div>
+      <div class="side"></div>
+    </div>
+
+    <div class="footer-status">Local player: stopped</div>
+    <div class="footer-label">Command reference</div>
+    <div class="footer-hints">tab focus  ·  enter play  ·  / commands  ·  q quit</div>
+
+    <div class="dock"><span class="cursor">›</span>Search tracks, playlists, or enter /pause /resume /next /prev /local start</div>
+  </div>
+</body>
+</html>
