@@ -51,8 +51,10 @@ func (m *model) resize() {
 
 func (m *model) resizeWithLayout(layout layoutMetrics) {
 	m.list.SetDelegate(resultDelegate{
-		width:      layout.mainWidth,
-		wideLayout: !layout.widthCompact,
+		width:       layout.mainWidth,
+		wideLayout:  !layout.widthCompact,
+		focused:     !m.inputFocused,
+		accentColor: m.vividAccentColor(),
 	})
 	m.list.SetSize(maxInt(20, layout.mainWidth), maxInt(1, layout.listHeight-layout.resultsChromeHeight))
 	m.input.Width = layout.inputWidth
@@ -138,16 +140,13 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 
 	pageVertical := paddingY * 2
 	playbarHeight := lipgloss.Height(m.playbarContainerStyle(tempLayout).Width(bodyWidth).Render(m.playbarView(tempLayout)))
+	dockHeight := lipgloss.Height(m.dockContainerStyle(tempLayout).Width(bodyWidth).Render(m.commandDockView(tempLayout)))
 	footerHeight := 0
 	if footerVisible {
 		footerHeight = lipgloss.Height(m.footerPanel(mainWidth, tempLayout))
 	}
-	dockHeight := lipgloss.Height(m.dockContainerStyle(tempLayout).Width(bodyWidth).Render(m.commandDockView(tempLayout)))
 	sectionGaps := 1
 	if footerVisible {
-		sectionGaps++
-	}
-	if dockHeight > 0 {
 		sectionGaps++
 	}
 	available := m.height - pageVertical - playbarHeight - footerHeight - dockHeight - sectionGaps

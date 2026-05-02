@@ -311,3 +311,51 @@ func TestIdlePlaybarOmitsIdleSearchSubtitle(t *testing.T) {
 		t.Fatalf("expected idle playbar to omit the search subtitle, got %q", playbar)
 	}
 }
+
+func TestResultsPanelShowsActiveFocusState(t *testing.T) {
+	m := newModel(nil)
+	m.width = 120
+	m.height = 26
+	m.query = "boards of canada"
+	m.resultCount = 3
+	m.list.SetItems([]list.Item{
+		resultItem{title: "Dayvan Cowboy", description: "track", kind: "track"},
+	})
+
+	layout := m.layoutMetrics()
+
+	panel := m.resultsPanel(layout.mainWidth, layout)
+	if !strings.Contains(panel, "command active") {
+		t.Fatalf("expected input-focused results panel to show command focus, got %q", panel)
+	}
+
+	m.inputFocused = false
+	m.resize()
+	panel = m.resultsPanel(layout.mainWidth, layout)
+	if !strings.Contains(panel, "list active") {
+		t.Fatalf("expected list-focused results panel to show list focus, got %q", panel)
+	}
+}
+
+func TestViewRendersDockBeforeFooter(t *testing.T) {
+	m := newModel(nil)
+	m.width = 120
+	m.height = 26
+	m.localPlayer = localPlayerStatus{
+		supported:       true,
+		binaryAvailable: true,
+		process:         "running",
+		device:          "spotui-speaker",
+	}
+
+	view := m.View()
+
+	dockIndex := strings.Index(view, "Command dock")
+	footerIndex := strings.Index(view, "Local player: running")
+	if dockIndex == -1 || footerIndex == -1 {
+		t.Fatalf("expected view to include dock and footer, got %q", view)
+	}
+	if dockIndex > footerIndex {
+		t.Fatalf("expected dock to render before footer, got %q", view)
+	}
+}

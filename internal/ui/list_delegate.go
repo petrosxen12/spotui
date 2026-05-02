@@ -13,8 +13,10 @@ import (
 )
 
 type resultDelegate struct {
-	width      int
-	wideLayout bool
+	width       int
+	wideLayout  bool
+	focused     bool
+	accentColor string
 }
 
 func (d resultDelegate) Height() int  { return 2 }
@@ -28,6 +30,7 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 	var titleText string
 	var descText string
 	var metaText string
+	selected := index == m.Index()
 
 	switch entry := item.(type) {
 	case resultItem:
@@ -46,15 +49,12 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		return
 	}
 
-	line1 := d.renderPrimaryLine(titleText, metaText, index == m.Index())
+	line1 := d.renderPrimaryLine(titleText, metaText, selected)
 	descWidth := maxInt(1, d.contentWidth()-2)
-	line2 := "  " + rowDescStyle.Render(truncateText(descText, descWidth))
+	line2 := "  " + d.descriptionStyle(selected).Render(truncateText(descText, descWidth))
 
-	if index == m.Index() {
-		block := strings.Join([]string{
-			selectedTitleStyle.Render(line1),
-			selectedDescStyle.Render(line2),
-		}, "\n")
+	if selected {
+		block := strings.Join([]string{line1, line2}, "\n")
 		fmt.Fprint(w, selectedRowStyle.Render(block))
 		return
 	}
@@ -64,12 +64,19 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 
 func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, selected bool) string {
 	prefix := "  "
+	prefixStyle := lipgloss.NewStyle()
 	titleStyleToUse := rowTitleStyle
 	metaStyleToUse := metaPillStyle
 	if selected {
-		prefix = "› "
-		titleStyleToUse = selectedTitleStyle
-		metaStyleToUse = selectedDescStyle.Copy().Bold(true)
+		prefix = "· "
+		titleStyleToUse = rowTitleStyle.Copy().Bold(true)
+		metaStyleToUse = rowDescStyle.Copy().Bold(true)
+		if d.focused {
+			prefix = "› "
+			prefixStyle = prefixStyle.Foreground(lipgloss.Color(d.accentColor)).Bold(true)
+			titleStyleToUse = selectedTitleStyle
+			metaStyleToUse = selectedDescStyle.Copy().Bold(true)
+		}
 	}
 
 	if !d.wideLayout || d.contentWidth() < 36 {
@@ -80,7 +87,7 @@ func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, sel
 			" ",
 			titleStyleToUse.Render(truncateText(titleText, titleWidth)),
 		)
-		return prefix + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(left)
+		return prefixStyle.Render(prefix) + lipgloss.NewStyle().MaxWidth(maxInt(1, d.contentWidth())).Render(left)
 	}
 
 	meta := metaStyleToUse.Render(metaText)
@@ -90,7 +97,7 @@ func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, sel
 	if gap < 2 {
 		gap = 2
 	}
-	return prefix + left + strings.Repeat(" ", gap) + meta
+	return prefixStyle.Render(prefix) + left + strings.Repeat(" ", gap) + meta
 }
 
 func (d resultDelegate) contentWidth() int {
@@ -98,6 +105,16 @@ func (d resultDelegate) contentWidth() int {
 		return 40
 	}
 	return maxInt(1, d.width-2)
+}
+
+func (d resultDelegate) descriptionStyle(selected bool) lipgloss.Style {
+	if selected {
+		if d.focused {
+			return selectedDescStyle
+		}
+		return rowDescStyle
+	}
+	return rowDescStyle
 }
 
 type resultItem struct {
