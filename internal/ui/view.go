@@ -23,7 +23,9 @@ var (
 				Bold(true)
 
 	dockStyle = lipgloss.NewStyle().
-			MarginTop(1)
+			BorderTop(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.AdaptiveColor{Light: "#C4CCC7", Dark: "#4D5551"})
 
 	eyebrowStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#66706B", Dark: "#8A948F"}).
@@ -109,7 +111,7 @@ func (m model) View() string {
 
 	dock := m.dockContainerStyle(layout).Width(layout.bodyWidth).Render(m.commandDockView(layout))
 
-	mainContent := m.mainContent(layout)
+	mainContent := m.resultsPanel(layout.mainWidth, layout)
 	if layout.railEnabled {
 		rail := contextRailStyle.Width(layout.railWidth).MaxHeight(lipgloss.Height(mainContent)).Render(m.contextRailView(layout))
 		mainContent = lipgloss.JoinHorizontal(
@@ -120,19 +122,15 @@ func (m model) View() string {
 		)
 	}
 
-	return page.Width(m.width).Render(strings.Join([]string{
+	mainSections := []string{
 		playbar,
 		mainContent,
 		dock,
-	}, "\n"))
-}
-
-func (m model) mainContent(layout layoutMetrics) string {
-	mainSections := []string{m.resultsPanel(layout.mainWidth, layout)}
+	}
 	if layout.footerVisible {
 		mainSections = append(mainSections, m.footerPanel(layout.mainWidth, layout))
 	}
-	return strings.Join(mainSections, "\n")
+	return page.Width(m.width).Render(strings.Join(mainSections, "\n"))
 }
 
 func (m model) playbarContainerStyle(layout layoutMetrics) lipgloss.Style {
@@ -145,13 +143,7 @@ func (m model) playbarContainerStyle(layout layoutMetrics) lipgloss.Style {
 func (m model) dockContainerStyle(layout layoutMetrics) lipgloss.Style {
 	style := dockStyle
 	if m.inputFocused {
-		style = dockStyle.Copy().
-			BorderTop(true).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color(m.vividAccentColor()))
-	}
-	if layout.heightCompact {
-		return style.Copy().MarginTop(0)
+		style = style.Copy().BorderForeground(lipgloss.Color(m.vividAccentColor()))
 	}
 	return style
 }
@@ -337,6 +329,7 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 			countLabel = "No results yet"
 		}
 	}
+	focusLabel := m.resultsFocusLabel()
 
 	body := m.list.View()
 	if m.resultCount == 0 {
@@ -358,10 +351,18 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 		lines = append(lines, eyebrowStyle.Render(header))
 	}
 	progressText := strings.TrimSpace(m.listProgressText())
-	if countLabel != "" && progressText != "" {
-		lines = append(lines, kickerStyle.Render(joinAndTruncate(width, "  ·  ", countLabel, progressText)))
-	} else if countLabel != "" {
-		lines = append(lines, kickerStyle.Render(countLabel))
+	metaParts := make([]string, 0, 3)
+	if countLabel != "" {
+		metaParts = append(metaParts, countLabel)
+	}
+	if progressText != "" {
+		metaParts = append(metaParts, progressText)
+	}
+	if focusLabel != "" && (len(metaParts) > 0 || body != "") {
+		metaParts = append(metaParts, focusLabel)
+	}
+	if len(metaParts) > 0 {
+		lines = append(lines, kickerStyle.Render(joinAndTruncate(width, "  ·  ", metaParts...)))
 	}
 	if body == "" {
 		return style.Width(width).Render(strings.Join(lines, "\n"))
@@ -375,6 +376,13 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 		lines = append(lines, body)
 	}
 	return style.Width(width).Render(strings.Join(lines, "\n"))
+}
+
+func (m model) resultsFocusLabel() string {
+	if m.inputFocused {
+		return "command active"
+	}
+	return "list active"
 }
 
 func (m model) footerPanel(width int, layout layoutMetrics) string {
@@ -535,12 +543,19 @@ func (m model) bootLoadingText() string {
 func (m model) commandDockView(layout layoutMetrics) string {
 	inputLine := m.input.View()
 	inputView := inputShellStyle.Width(maxInt(10, layout.bodyWidth-4)).Render(inputLine)
-	lines := []string{}
+	lines := []string{eyebrowStyle.Render(m.commandDockTitle())}
 	if popup := m.suggestionsView(layout); popup != "" {
 		lines = append(lines, popup)
 	}
 	lines = append(lines, inputView)
 	return strings.Join(lines, "\n")
+}
+
+func (m model) commandDockTitle() string {
+	if m.inputFocused {
+		return "Command dock"
+	}
+	return "Press tab for command dock"
 }
 
 func (m model) suggestionsView(layout layoutMetrics) string {
@@ -567,8 +582,8 @@ func (m model) suggestionsView(layout layoutMetrics) string {
 		}
 	}
 	return lipgloss.NewStyle().
-		Padding(0, 0).
-		MarginBottom(1).
+		Padding(0, 1).
+		BorderTop(true).
 		BorderLeft(true).
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color(m.vividAccentColor())).
