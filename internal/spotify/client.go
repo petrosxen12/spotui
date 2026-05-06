@@ -113,7 +113,7 @@ func classifyError(status int, header http.Header, body []byte) error {
 		if strings.Contains(strings.ToLower(message), "premium") {
 			return spoterr.New(spoterr.KindPremiumRequired, "Spotify Premium is required for playback control")
 		}
-		return fmt.Errorf("Spotify denied the request: %s", message)
+		return spoterr.New(spoterr.KindForbidden, fmt.Sprintf("Spotify denied the request: %s", message))
 	case http.StatusNotFound:
 		return spoterr.New(spoterr.KindNoActiveDevice, "no active playback device found; start Spotify on a device or select one with `spotui use`")
 	case http.StatusTooManyRequests:

@@ -17,11 +17,28 @@ type PlaybackState struct {
 		Name       string   `json:"name"`
 		URI        string   `json:"uri"`
 		DurationMS int64    `json:"duration_ms"`
+		Explicit   bool     `json:"explicit"`
+		Popularity int      `json:"popularity"`
 		Artists    []Artist `json:"artists"`
 		Album      struct {
+			Name   string  `json:"name"`
 			Images []Image `json:"images"`
 		} `json:"album"`
 	} `json:"item"`
+}
+
+type AudioFeatures struct {
+	Danceability     float64 `json:"danceability"`
+	Energy           float64 `json:"energy"`
+	Key              int     `json:"key"`
+	Mode             int     `json:"mode"`
+	Speechiness      float64 `json:"speechiness"`
+	Acousticness     float64 `json:"acousticness"`
+	Instrumentalness float64 `json:"instrumentalness"`
+	Liveness         float64 `json:"liveness"`
+	Valence          float64 `json:"valence"`
+	Tempo            float64 `json:"tempo"`
+	TimeSignature    int     `json:"time_signature"`
 }
 
 type QueueResponse struct {
@@ -49,4 +66,12 @@ func (c *Client) GetQueue(ctx context.Context) (*QueueResponse, error) {
 		return nil, err
 	}
 	return &queue, nil
+}
+
+func (c *Client) GetAudioFeatures(ctx context.Context, trackID string) (*AudioFeatures, error) {
+	var features AudioFeatures
+	if err := c.do(ctx, http.MethodGet, "/audio-features/"+trackID, nil, nil, &features); err != nil {
+		return nil, err
+	}
+	return &features, nil
 }

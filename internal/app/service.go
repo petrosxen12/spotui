@@ -11,9 +11,9 @@ import (
 
 	"github.com/petrosxen/spotui/internal/auth"
 	"github.com/petrosxen/spotui/internal/config"
-	"github.com/petrosxen/spotui/internal/spotifyd"
 	"github.com/petrosxen/spotui/internal/spoterr"
 	spotifyapi "github.com/petrosxen/spotui/internal/spotify"
+	"github.com/petrosxen/spotui/internal/spotifyd"
 	"github.com/sahilm/fuzzy"
 )
 
@@ -29,6 +29,7 @@ type PlayerService interface {
 	Next(ctx context.Context) error
 	Prev(ctx context.Context) error
 	GetPlaybackState(ctx context.Context) (PlaybackState, error)
+	GetCurrentTrackDetails(ctx context.Context) (TrackDetails, error)
 	ListDevices(ctx context.Context) ([]Device, error)
 	ListPlaylists(ctx context.Context) ([]Playlist, error)
 	SetDeviceByID(ctx context.Context, id string) error
@@ -257,6 +258,71 @@ func (s *Service) GetPlaybackState(ctx context.Context) (PlaybackState, error) {
 	}
 
 	return playback, nil
+}
+
+func (s *Service) GetCurrentTrackDetails(ctx context.Context) (TrackDetails, error) {
+	state, err := s.client.GetPlaybackState(ctx)
+	if err != nil {
+		return TrackDetails{}, err
+	}
+	if state.Item.URI == "" || state.Item.Name == "" {
+		return TrackDetails{}, fmt.Errorf("nothing is currently playing")
+	}
+	if state.CurrentlyPlayingType != "" && state.CurrentlyPlayingType != "track" {
+		return TrackDetails{}, fmt.Errorf("current item is %q, not a track", state.CurrentlyPlayingType)
+	}
+
+	trackID, ok := spotifyTrackIDFromURI(state.Item.URI)
+	if !ok {
+		return TrackDetails{}, fmt.Errorf("could not resolve track id from current item")
+	}
+
+	details := TrackDetails{
+		Title:      state.Item.Name,
+		Artists:    strings.Join(artistNames(state.Item.Artists), ", "),
+		Album:      state.Item.Album.Name,
+		DeviceName: state.Device.Name,
+		TrackURI:   state.Item.URI,
+		ContextURI: state.Context.URI,
+		IsPlaying:  state.IsPlaying,
+		Progress:   time.Duration(state.ProgressMS) * time.Millisecond,
+		Duration:   time.Duration(state.Item.DurationMS) * time.Millisecond,
+		Explicit:   state.Item.Explicit,
+		Popularity: state.Item.Popularity,
+	}
+
+	features, err := s.client.GetAudioFeatures(ctx, trackID)
+	if err != nil {
+		if spoterr.KindOf(err) == spoterr.KindForbidden {
+			details.AudioFeaturesNote = "Audio features unavailable for this Spotify app."
+			return details, nil
+		}
+		return TrackDetails{}, err
+	}
+
+	details.AudioFeaturesAvailable = true
+	details.Danceability = features.Danceability
+	details.Energy = features.Energy
+	details.Valence = features.Valence
+	details.Acousticness = features.Acousticness
+	details.Instrumentalness = features.Instrumentalness
+	details.Liveness = features.Liveness
+	details.Speechiness = features.Speechiness
+	details.Tempo = features.Tempo
+	details.Key = features.Key
+	details.Mode = features.Mode
+	details.TimeSignature = features.TimeSignature
+
+	return details, nil
+}
+
+func spotifyTrackIDFromURI(uri string) (string, bool) {
+	const prefix = "spotify:track:"
+	if !strings.HasPrefix(uri, prefix) {
+		return "", false
+	}
+	id := strings.TrimSpace(strings.TrimPrefix(uri, prefix))
+	return id, id != ""
 }
 
 func (s *Service) ListDevices(ctx context.Context) ([]Device, error) {

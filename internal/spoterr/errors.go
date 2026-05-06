@@ -15,6 +15,7 @@ const (
 	KindPremiumRequired Kind = "premium_required"
 	KindRateLimited     Kind = "rate_limited"
 	KindNetworkFailure  Kind = "network_failure"
+	KindForbidden       Kind = "forbidden"
 )
 
 type Error struct {

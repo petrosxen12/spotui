@@ -74,3 +74,30 @@ type PlaybackState struct {
 	NextItemName     string
 	NextArtistName   string
 }
+
+type TrackDetails struct {
+	Title                  string
+	Artists                string
+	Album                  string
+	DeviceName             string
+	TrackURI               string
+	ContextURI             string
+	IsPlaying              bool
+	Progress               time.Duration
+	Duration               time.Duration
+	Explicit               bool
+	Popularity             int
+	AudioFeaturesAvailable bool
+	AudioFeaturesNote      string
+	Danceability           float64
+	Energy                 float64
+	Valence                float64
+	Acousticness           float64
+	Instrumentalness       float64
+	Liveness               float64
+	Speechiness            float64
+	Tempo                  float64
+	Key                    int
+	Mode                   int
+	TimeSignature          int
+}

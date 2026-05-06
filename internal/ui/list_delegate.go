@@ -44,7 +44,10 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 	case infoItem:
 		titleText = entry.title
 		descText = entry.description
-		metaText = "HELP"
+		metaText = entry.badge
+		if metaText == "" {
+			metaText = "HELP"
+		}
 	default:
 		return
 	}
@@ -139,6 +142,7 @@ func (i deviceItem) Description() string { return i.description }
 func (i deviceItem) FilterValue() string { return i.title + " " + i.description + " " + i.id }
 
 type infoItem struct {
+	badge       string
 	title       string
 	description string
 }
@@ -211,4 +215,87 @@ func itemsFromDevices(devices []app.Device) []list.Item {
 		})
 	}
 	return items
+}
+
+func itemsFromTrackDetails(details app.TrackDetails) []list.Item {
+	rows := []infoItem{
+		{badge: "DETAIL", title: "Track", description: details.Title},
+		{badge: "DETAIL", title: "Artist", description: details.Artists},
+		{badge: "DETAIL", title: "Album", description: details.Album},
+		{badge: "DETAIL", title: "Status", description: trackStatusSummary(details)},
+		{badge: "DETAIL", title: "Explicit", description: yesNo(details.Explicit)},
+		{badge: "DETAIL", title: "Popularity", description: fmt.Sprintf("%d/100", details.Popularity)},
+		{badge: "DETAIL", title: "Device", description: details.DeviceName},
+		{badge: "DETAIL", title: "Track URI", description: details.TrackURI},
+		{badge: "DETAIL", title: "Context URI", description: details.ContextURI},
+	}
+
+	if details.AudioFeaturesAvailable {
+		rows = append(rows,
+			infoItem{badge: "FEATURE", title: "Danceability", description: formatScore(details.Danceability)},
+			infoItem{badge: "FEATURE", title: "Energy", description: formatScore(details.Energy)},
+			infoItem{badge: "FEATURE", title: "Valence", description: formatScore(details.Valence)},
+			infoItem{badge: "FEATURE", title: "Acousticness", description: formatScore(details.Acousticness)},
+			infoItem{badge: "FEATURE", title: "Instrumentalness", description: formatScore(details.Instrumentalness)},
+			infoItem{badge: "FEATURE", title: "Liveness", description: formatScore(details.Liveness)},
+			infoItem{badge: "FEATURE", title: "Speechiness", description: formatScore(details.Speechiness)},
+			infoItem{badge: "FEATURE", title: "Tempo", description: fmt.Sprintf("%.0f BPM", details.Tempo)},
+			infoItem{badge: "FEATURE", title: "Key", description: musicalKey(details.Key, details.Mode)},
+			infoItem{badge: "FEATURE", title: "Time Signature", description: timeSignatureLabel(details.TimeSignature)},
+		)
+	} else if details.AudioFeaturesNote != "" {
+		rows = append(rows, infoItem{badge: "NOTICE", title: "Audio Features", description: details.AudioFeaturesNote})
+	}
+
+	items := make([]list.Item, 0, len(rows))
+	for _, row := range rows {
+		if strings.TrimSpace(row.description) == "" {
+			continue
+		}
+		items = append(items, row)
+	}
+	return items
+}
+
+func trackStatusSummary(details app.TrackDetails) string {
+	status := "paused"
+	if details.IsPlaying {
+		status = "playing"
+	}
+
+	parts := []string{status}
+	if details.Duration > 0 {
+		parts = append(parts, formatDuration(details.Progress)+" / "+formatDuration(details.Duration))
+	}
+	return strings.Join(parts, "  ·  ")
+}
+
+func formatScore(value float64) string {
+	return fmt.Sprintf("%.2f", value)
+}
+
+func musicalKey(key int, mode int) string {
+	keys := []string{"C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"}
+	if key < 0 || key >= len(keys) {
+		return "Unknown"
+	}
+	tonality := "major"
+	if mode == 0 {
+		tonality = "minor"
+	}
+	return fmt.Sprintf("%s %s", keys[key], tonality)
+}
+
+func timeSignatureLabel(signature int) string {
+	if signature <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d beats/bar", signature)
+}
+
+func yesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
 }
