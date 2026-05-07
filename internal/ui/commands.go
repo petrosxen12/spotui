@@ -19,6 +19,7 @@ type slashCommand struct {
 }
 
 var slashCommands = []slashCommand{
+	{name: "/details", usage: "/details", description: "show details for the current track"},
 	{name: "/help", usage: "/help", description: "show command help"},
 	{name: "/local", usage: "/local start", description: "start the lightweight local player"},
 	{name: "/local", usage: "/local stop", description: "stop the lightweight local player"},
@@ -61,6 +62,8 @@ func (m model) runSlashCommand(raw string) tea.Cmd {
 	}
 
 	switch command {
+	case "details":
+		return fetchTrackDetailsCmd(m.service)
 	case "help":
 		return func() tea.Msg { return helpMsg{} }
 	case "local":
@@ -239,6 +242,13 @@ func fetchPlaybackCmd(service app.PlayerService) tea.Cmd {
 	return func() tea.Msg {
 		state, err := service.GetPlaybackState(context.Background())
 		return playbackMsg{state: state, err: err}
+	}
+}
+
+func fetchTrackDetailsCmd(service app.PlayerService) tea.Cmd {
+	return func() tea.Msg {
+		details, err := service.GetCurrentTrackDetails(context.Background())
+		return trackDetailsMsg{details: details, err: err}
 	}
 }
 

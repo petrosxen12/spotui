@@ -239,6 +239,163 @@ func TestGetPlaybackStateRefetchesQueueWhenTrackChanges(t *testing.T) {
 	}
 }
 
+func TestGetCurrentTrackDetailsFetchesAudioFeatures(t *testing.T) {
+	cfg := testConfig(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me/player":
+			writeJSON(t, w, map[string]any{
+				"device": map[string]any{
+					"id":        "device-1",
+					"name":      "Desk Speakers",
+					"type":      "Computer",
+					"is_active": true,
+				},
+				"is_playing":             true,
+				"progress_ms":            42000,
+				"currently_playing_type": "track",
+				"context":                map[string]any{"uri": "spotify:playlist:mix"},
+				"item": map[string]any{
+					"name":        "Track One",
+					"uri":         "spotify:track:one",
+					"duration_ms": 200000,
+					"explicit":    true,
+					"popularity":  87,
+					"artists":     []map[string]any{{"name": "Artist One"}},
+					"album": map[string]any{
+						"name":   "Album One",
+						"images": []map[string]any{{"url": "https://img/one"}},
+					},
+				},
+			})
+		case "/v1/audio-features/one":
+			writeJSON(t, w, map[string]any{
+				"danceability":     0.81,
+				"energy":           0.72,
+				"valence":          0.64,
+				"acousticness":     0.12,
+				"instrumentalness": 0.01,
+				"liveness":         0.09,
+				"speechiness":      0.05,
+				"tempo":            123.9,
+				"key":              9,
+				"mode":             1,
+				"time_signature":   4,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	service := &Service{
+		cfg:    cfg,
+		client: spotifyapi.NewClient(cfg, staticTokenSource{}),
+		local:  stubLocalPlayerManager{},
+	}
+
+	restoreTransport := rewriteSpotifyAPI(t, server.URL)
+	defer restoreTransport()
+
+	details, err := service.GetCurrentTrackDetails(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentTrackDetails() error = %v", err)
+	}
+	if details.Title != "Track One" {
+		t.Fatalf("Title = %q, want Track One", details.Title)
+	}
+	if details.Album != "Album One" {
+		t.Fatalf("Album = %q, want Album One", details.Album)
+	}
+	if details.Artists != "Artist One" {
+		t.Fatalf("Artists = %q, want Artist One", details.Artists)
+	}
+	if details.DeviceName != "Desk Speakers" {
+		t.Fatalf("DeviceName = %q, want Desk Speakers", details.DeviceName)
+	}
+	if details.Danceability != 0.81 {
+		t.Fatalf("Danceability = %v, want 0.81", details.Danceability)
+	}
+	if details.Popularity != 87 {
+		t.Fatalf("Popularity = %d, want 87", details.Popularity)
+	}
+	if !details.Explicit {
+		t.Fatal("expected Explicit to be true")
+	}
+	if !details.AudioFeaturesAvailable {
+		t.Fatal("expected AudioFeaturesAvailable to be true")
+	}
+}
+
+func TestGetCurrentTrackDetailsFallsBackWhenAudioFeaturesForbidden(t *testing.T) {
+	cfg := testConfig(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me/player":
+			writeJSON(t, w, map[string]any{
+				"device": map[string]any{
+					"id":        "device-1",
+					"name":      "Desk Speakers",
+					"type":      "Computer",
+					"is_active": true,
+				},
+				"is_playing":             true,
+				"progress_ms":            42000,
+				"currently_playing_type": "track",
+				"context":                map[string]any{"uri": "spotify:playlist:mix"},
+				"item": map[string]any{
+					"name":        "Track One",
+					"uri":         "spotify:track:one",
+					"duration_ms": 200000,
+					"explicit":    true,
+					"popularity":  87,
+					"artists":     []map[string]any{{"name": "Artist One"}},
+					"album": map[string]any{
+						"name":   "Album One",
+						"images": []map[string]any{{"url": "https://img/one"}},
+					},
+				},
+			})
+		case "/v1/audio-features/one":
+			w.WriteHeader(http.StatusForbidden)
+			writeJSON(t, w, map[string]any{
+				"error": map[string]any{
+					"status":  http.StatusForbidden,
+					"message": "audio features access restricted",
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	service := &Service{
+		cfg:    cfg,
+		client: spotifyapi.NewClient(cfg, staticTokenSource{}),
+		local:  stubLocalPlayerManager{},
+	}
+
+	restoreTransport := rewriteSpotifyAPI(t, server.URL)
+	defer restoreTransport()
+
+	details, err := service.GetCurrentTrackDetails(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentTrackDetails() error = %v", err)
+	}
+	if details.Title != "Track One" {
+		t.Fatalf("Title = %q, want Track One", details.Title)
+	}
+	if details.AudioFeaturesAvailable {
+		t.Fatal("expected AudioFeaturesAvailable to be false")
+	}
+	if details.AudioFeaturesNote == "" {
+		t.Fatal("expected AudioFeaturesNote to be set")
+	}
+}
+
 type staticTokenSource struct{}
 
 func (staticTokenSource) ValidAccessToken(context.Context) (string, error) {

@@ -12,6 +12,7 @@ import (
 
 type stubPlayerService struct {
 	listDevices       func(context.Context) ([]app.Device, error)
+	trackDetails      func(context.Context) (app.TrackDetails, error)
 	localPlayerStatus app.LocalPlayerStatus
 	startLocalPlayer  func(context.Context) error
 	resetLocalPlayer  func(context.Context) error
@@ -53,6 +54,13 @@ func (s stubPlayerService) Prev(context.Context) error {
 
 func (s stubPlayerService) GetPlaybackState(context.Context) (app.PlaybackState, error) {
 	return app.PlaybackState{}, nil
+}
+
+func (s stubPlayerService) GetCurrentTrackDetails(ctx context.Context) (app.TrackDetails, error) {
+	if s.trackDetails != nil {
+		return s.trackDetails(ctx)
+	}
+	return app.TrackDetails{}, nil
 }
 
 func (s stubPlayerService) ListDevices(ctx context.Context) ([]app.Device, error) {
@@ -245,6 +253,18 @@ func TestBuildSuggestionsIncludesLocalCommands(t *testing.T) {
 	}
 }
 
+func TestBuildSuggestionsIncludesDetailsCommand(t *testing.T) {
+	m := newModel(stubPlayerService{})
+
+	suggestions := m.buildSuggestions("/det")
+	if len(suggestions) != 1 {
+		t.Fatalf("expected 1 details suggestion, got %d", len(suggestions))
+	}
+	if suggestions[0].insertValue != "/details" {
+		t.Fatalf("unexpected details suggestion %q", suggestions[0].insertValue)
+	}
+}
+
 func TestBuildSuggestionsIncludesLocalSubcommandsAfterSpace(t *testing.T) {
 	m := newModel(stubPlayerService{})
 
@@ -301,6 +321,35 @@ func TestLocalStartCommandCallsService(t *testing.T) {
 	}
 	if called != 1 {
 		t.Fatalf("expected StartLocalPlayer to be called once, got %d", called)
+	}
+}
+
+func TestDetailsCommandCallsService(t *testing.T) {
+	called := 0
+	m := newModel(stubPlayerService{
+		trackDetails: func(context.Context) (app.TrackDetails, error) {
+			called++
+			return app.TrackDetails{Title: "Current Track", Danceability: 0.82}, nil
+		},
+	})
+
+	cmd := m.runSlashCommand("/details")
+	if cmd == nil {
+		t.Fatal("expected details command")
+	}
+	msg := cmd()
+	details, ok := msg.(trackDetailsMsg)
+	if !ok {
+		t.Fatalf("expected trackDetailsMsg, got %T", msg)
+	}
+	if details.err != nil {
+		t.Fatalf("unexpected error: %v", details.err)
+	}
+	if details.details.Title != "Current Track" {
+		t.Fatalf("unexpected details title %q", details.details.Title)
+	}
+	if called != 1 {
+		t.Fatalf("expected GetCurrentTrackDetails to be called once, got %d", called)
 	}
 }
 

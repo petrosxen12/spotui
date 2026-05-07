@@ -50,6 +50,10 @@ func (s *shutdownOnlyService) GetPlaybackState(context.Context) (app.PlaybackSta
 	return app.PlaybackState{}, nil
 }
 
+func (s *shutdownOnlyService) GetCurrentTrackDetails(context.Context) (app.TrackDetails, error) {
+	return app.TrackDetails{}, nil
+}
+
 func (s *shutdownOnlyService) ListDevices(context.Context) ([]app.Device, error) {
 	return nil, nil
 }

@@ -18,6 +18,11 @@ type playbackMsg struct {
 	err   error
 }
 
+type trackDetailsMsg struct {
+	details app.TrackDetails
+	err     error
+}
+
 type actionMsg struct {
 	text string
 	err  error

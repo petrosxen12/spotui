@@ -45,6 +45,10 @@ func (reflectedLocalPlayerService) GetPlaybackState(context.Context) (app.Playba
 	return app.PlaybackState{}, nil
 }
 
+func (reflectedLocalPlayerService) GetCurrentTrackDetails(context.Context) (app.TrackDetails, error) {
+	return app.TrackDetails{}, nil
+}
+
 func (reflectedLocalPlayerService) ListDevices(context.Context) ([]app.Device, error) {
 	return nil, nil
 }

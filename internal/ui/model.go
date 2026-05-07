@@ -18,6 +18,7 @@ const (
 	listModeSearch  listMode = "search"
 	listModeDevices listMode = "devices"
 	listModeHelp    listMode = "help"
+	listModeDetails listMode = "details"
 )
 
 type model struct {
@@ -232,6 +233,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.Select(0)
 		m.resultCount = len(helpItems)
 		actionCmd := m.setLastAction("Command reference", false)
+		m.clearBanner()
+		return m, actionCmd
+	case trackDetailsMsg:
+		if msg.err != nil {
+			m.setLastAction(msg.err.Error(), true)
+			m.showBannerForError(msg.err)
+			return m, nil
+		}
+		m.pushViewState()
+		m.listMode = listModeDetails
+		items := itemsFromTrackDetails(msg.details)
+		m.list.SetItems(items)
+		m.list.Select(0)
+		m.resultCount = len(items)
+		actionCmd := m.setLastAction("Current track details", false)
 		m.clearBanner()
 		return m, actionCmd
 	case playbackMsg:
