@@ -312,7 +312,7 @@ func TestIdlePlaybarOmitsIdleSearchSubtitle(t *testing.T) {
 	}
 }
 
-func TestResultsPanelShowsActiveFocusState(t *testing.T) {
+func TestResultsPanelOmitsExplicitFocusStateCopy(t *testing.T) {
 	m := newModel(nil)
 	m.width = 120
 	m.height = 26
@@ -325,19 +325,19 @@ func TestResultsPanelShowsActiveFocusState(t *testing.T) {
 	layout := m.layoutMetrics()
 
 	panel := m.resultsPanel(layout.mainWidth, layout)
-	if !strings.Contains(panel, "command active") {
-		t.Fatalf("expected input-focused results panel to show command focus, got %q", panel)
+	if strings.Contains(panel, "command active") {
+		t.Fatalf("expected input-focused results panel to omit command focus copy, got %q", panel)
 	}
 
 	m.inputFocused = false
 	m.resize()
 	panel = m.resultsPanel(layout.mainWidth, layout)
-	if !strings.Contains(panel, "list active") {
-		t.Fatalf("expected list-focused results panel to show list focus, got %q", panel)
+	if strings.Contains(panel, "list active") {
+		t.Fatalf("expected list-focused results panel to omit list focus copy, got %q", panel)
 	}
 }
 
-func TestViewRendersDockBeforeFooter(t *testing.T) {
+func TestViewRendersCommandBarBeforeResults(t *testing.T) {
 	m := newModel(nil)
 	m.width = 120
 	m.height = 26
@@ -350,12 +350,12 @@ func TestViewRendersDockBeforeFooter(t *testing.T) {
 
 	view := m.View()
 
-	dockIndex := strings.Index(view, "Command dock")
-	footerIndex := strings.Index(view, "Local player: running")
-	if dockIndex == -1 || footerIndex == -1 {
-		t.Fatalf("expected view to include dock and footer, got %q", view)
+	commandIndex := strings.Index(view, "search or /")
+	resultsIndex := strings.Index(view, "Waiting for spotui-speaker to become the active output.")
+	if commandIndex == -1 || resultsIndex == -1 {
+		t.Fatalf("expected view to include command bar and results panel, got %q", view)
 	}
-	if dockIndex > footerIndex {
-		t.Fatalf("expected dock to render before footer, got %q", view)
+	if commandIndex > resultsIndex {
+		t.Fatalf("expected command bar to render before results, got %q", view)
 	}
 }

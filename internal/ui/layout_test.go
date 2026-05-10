@@ -15,8 +15,9 @@ func TestClassifyHeightMode(t *testing.T) {
 		height int
 		want   layoutHeightMode
 	}{
-		{height: 17, want: heightModeMinimal},
-		{height: 18, want: heightModeCompact},
+		{height: 9, want: heightModeMinimal},
+		{height: 10, want: heightModeCompact},
+		{height: 17, want: heightModeCompact},
 		{height: 23, want: heightModeCompact},
 		{height: 24, want: heightModeNormal},
 	}
@@ -67,7 +68,7 @@ func TestLayoutMetricsShortHeightModes(t *testing.T) {
 
 	t.Run("minimal height reduces chrome aggressively", func(t *testing.T) {
 		m.width = 140
-		m.height = 17
+		m.height = 9
 
 		layout := m.layoutMetrics()
 
@@ -92,7 +93,7 @@ func TestLayoutMetricsShortHeightModes(t *testing.T) {
 func TestLowHeightPanelsCollapseChrome(t *testing.T) {
 	m := newModel(nil)
 	m.width = 100
-	m.height = 17
+	m.height = 9
 	m.connectionStatus = "Connected as tester"
 	m.lastAction = "Loaded 12 results"
 	m.playback = app.PlaybackState{
@@ -157,7 +158,7 @@ func TestWideCompactHeightKeepsRailWhenContextWouldOverflow(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "spotui") {
+	if !strings.Contains(view, "Current Track") {
 		t.Fatal("expected playbar to remain visible in rendered view")
 	}
 	if !strings.Contains(view, "Context") {
