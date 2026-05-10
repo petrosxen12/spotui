@@ -1,0 +1,8 @@
+ ● idle  ·  ● Petros Xen                                                
+ Nothing playing                                                        
+ ─────────────────  0:00 / 0:00                                         
+ › /local use                                                           
+ Waiting for spotui-speaker to become the active output.                
+ Local player: starting  ·  spotui-speaker  ·  waiting for Spotify Con… 
+ Waiting for spotifyd to register as a Spotify device.                  
+ Started local player. Current state: starting                          
