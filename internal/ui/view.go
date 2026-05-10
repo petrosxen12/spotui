@@ -22,10 +22,7 @@ var (
 	panelFocusedStyle = panelStyle.Copy().
 				Bold(true)
 
-	dockStyle = lipgloss.NewStyle().
-			BorderTop(true).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.AdaptiveColor{Light: "#C4CCC7", Dark: "#4D5551"})
+	commandBarStyle = lipgloss.NewStyle()
 
 	eyebrowStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#66706B", Dark: "#8A948F"}).
@@ -44,6 +41,9 @@ var (
 	nowPlayingHeroStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#111513", Dark: "#F6F8F7"}).
 				Bold(true)
+
+	nowPlayingMutedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#7A837F", Dark: "#8E9793"})
 
 	subtitleStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "#505854", Dark: "#C7CECA"})
@@ -109,7 +109,7 @@ func (m model) View() string {
 	page := pageStyle.Copy().Padding(layout.pagePaddingY, layout.pagePaddingX)
 	playbar := m.playbarContainerStyle(layout).Width(layout.bodyWidth).Render(m.playbarView(layout))
 
-	dock := m.dockContainerStyle(layout).Width(layout.bodyWidth).Render(m.commandDockView(layout))
+	commandBar := m.commandBarContainerStyle().Width(layout.bodyWidth).Render(m.commandBarView(layout))
 
 	mainContent := m.resultsPanel(layout.mainWidth, layout)
 	if layout.railEnabled {
@@ -124,8 +124,8 @@ func (m model) View() string {
 
 	mainSections := []string{
 		playbar,
+		commandBar,
 		mainContent,
-		dock,
 	}
 	if layout.footerVisible {
 		mainSections = append(mainSections, m.footerPanel(layout.mainWidth, layout))
@@ -140,11 +140,8 @@ func (m model) playbarContainerStyle(layout layoutMetrics) lipgloss.Style {
 	return playbarStyle
 }
 
-func (m model) dockContainerStyle(layout layoutMetrics) lipgloss.Style {
-	style := dockStyle
-	if m.inputFocused {
-		style = style.Copy().BorderForeground(lipgloss.Color(m.vividAccentColor()))
-	}
+func (m model) commandBarContainerStyle() lipgloss.Style {
+	style := commandBarStyle
 	return style
 }
 
@@ -192,14 +189,11 @@ func (m model) playbarView(layout layoutMetrics) string {
 				progressGroup,
 			}, "\n")
 		}
-		secondaryParts := make([]string, 0, 3)
+		secondaryParts := make([]string, 0, 2)
 		if artist != "" {
 			secondaryParts = append(secondaryParts, artist)
 		}
-		if device != "" {
-			secondaryParts = append(secondaryParts, device)
-		}
-		if m.playback.NextItemName != "" && layout.bodyWidth >= 52 {
+		if m.playback.IsPlaying && m.playback.NextItemName != "" && layout.bodyWidth >= 64 {
 			secondaryParts = append(secondaryParts, "next "+m.playback.NextItemName)
 		}
 		lines := []string{
@@ -222,14 +216,11 @@ func (m model) playbarView(layout layoutMetrics) string {
 			strings.Repeat(" ", maxInt(2, layout.bodyWidth-lipgloss.Width(titleText)-lipgloss.Width(progressGroup))),
 			progressGroup,
 		)
-		metaParts := make([]string, 0, 3)
+		metaParts := make([]string, 0, 2)
 		if artist != "" {
 			metaParts = append(metaParts, artist)
 		}
-		if device != "" {
-			metaParts = append(metaParts, device)
-		}
-		if m.playback.NextItemName != "" {
+		if m.playback.IsPlaying && m.playback.NextItemName != "" && layout.bodyWidth >= 84 {
 			metaParts = append(metaParts, "next "+m.playback.NextItemName)
 		}
 		lines := []string{
@@ -254,15 +245,9 @@ func (m model) playbarView(layout layoutMetrics) string {
 }
 
 func (m model) playbarStatusRow(width int, status string, device string) string {
-	parts := []string{
-		eyebrowStyle.Render("spotui"),
-		m.playingStatusStyle().Render("● " + status),
-	}
+	parts := []string{m.playingStatusStyle().Render("● " + status)}
 	if connection := m.connectionBadge(width); connection != "" {
 		parts = append(parts, connection)
-	}
-	if device != "" {
-		parts = append(parts, truncateText(device, maxInt(10, width/4)))
 	}
 	return statusRowStyle.Render(joinAndTruncate(width, "  ·  ", parts...))
 }
@@ -329,8 +314,6 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 			countLabel = "No results yet"
 		}
 	}
-	focusLabel := m.resultsFocusLabel()
-
 	body := m.list.View()
 	if m.resultCount == 0 {
 		switch m.listMode {
@@ -358,9 +341,6 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 	if progressText != "" {
 		metaParts = append(metaParts, progressText)
 	}
-	if focusLabel != "" && (len(metaParts) > 0 || body != "") {
-		metaParts = append(metaParts, focusLabel)
-	}
 	if len(metaParts) > 0 {
 		lines = append(lines, kickerStyle.Render(joinAndTruncate(width, "  ·  ", metaParts...)))
 	}
@@ -378,13 +358,6 @@ func (m model) resultsPanel(width int, layout layoutMetrics) string {
 	return style.Width(width).Render(strings.Join(lines, "\n"))
 }
 
-func (m model) resultsFocusLabel() string {
-	if m.inputFocused {
-		return "command active"
-	}
-	return "list active"
-}
-
 func (m model) footerPanel(width int, layout layoutMetrics) string {
 	if !layout.footerVisible {
 		return ""
@@ -399,7 +372,7 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 	}
 
 	statusParts := make([]string, 0, 1)
-	if line := m.localPlayer.statusLine(); line != "" && (layout.footerShowStatus || m.playback.Device.ID == "") {
+	if line := m.localPlayer.statusLine(); line != "" && m.playback.Device.ID == "" {
 		statusParts = append(statusParts, line)
 	}
 	lines := make([]string, 0, 3)
@@ -417,7 +390,7 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 		lines = append(lines, statusTone.Render(truncateText(currentAction, width)))
 	}
 	if layout.footerShowHints && m.bannerText == "" {
-		lines = append(lines, commandHintStyle.Render(truncateText("tab focus  ·  enter play  ·  / commands  ·  q quit", width)))
+		lines = append(lines, commandHintStyle.Render(truncateText("/ commands  ·  q quit", width)))
 	}
 	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
 }
@@ -540,22 +513,38 @@ func (m model) bootLoadingText() string {
 	return frames[m.bootFrames%len(frames)]
 }
 
-func (m model) commandDockView(layout layoutMetrics) string {
-	inputLine := m.input.View()
-	inputView := inputShellStyle.Width(maxInt(10, layout.bodyWidth-4)).Render(inputLine)
-	lines := []string{eyebrowStyle.Render(m.commandDockTitle())}
+func (m model) commandBarView(layout layoutMetrics) string {
+	input := m.input
+	input.PromptStyle = m.commandPromptStyle()
+	input.TextStyle = m.commandTextStyle()
+	input.PlaceholderStyle = commandHintStyle
+	input.Cursor.Style = m.commandPromptStyle()
+
+	inputLine := input.View()
+	inputView := inputShellStyle.Width(layout.bodyWidth).Render(inputLine)
 	if popup := m.suggestionsView(layout); popup != "" {
-		lines = append(lines, popup)
+		return lipgloss.NewStyle().
+			Padding(0, 1).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color(m.vividAccentColor())).
+			Width(maxInt(20, layout.bodyWidth-4)).
+			Render(strings.Join([]string{popup, inputLine}, "\n"))
 	}
-	lines = append(lines, inputView)
-	return strings.Join(lines, "\n")
+	return inputView
 }
 
-func (m model) commandDockTitle() string {
+func (m model) commandPromptStyle() lipgloss.Style {
 	if m.inputFocused {
-		return "Command dock"
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(m.vividAccentColor())).Bold(true)
 	}
-	return "Press tab for command dock"
+	return commandHintStyle
+}
+
+func (m model) commandTextStyle() lipgloss.Style {
+	if m.inputFocused {
+		return titleStyle
+	}
+	return subtitleStyle
 }
 
 func (m model) suggestionsView(layout layoutMetrics) string {
@@ -581,14 +570,7 @@ func (m model) suggestionsView(layout layoutMetrics) string {
 			lines = append(lines, commandHintStyle.Render("  "+line))
 		}
 	}
-	return lipgloss.NewStyle().
-		Padding(0, 1).
-		BorderTop(true).
-		BorderLeft(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(m.vividAccentColor())).
-		Width(maxInt(20, layout.bodyWidth-4)).
-		Render(strings.Join(lines, "\n"))
+	return strings.Join(lines, "\n")
 }
 
 func (m model) selectedContextLines(width int) []string {
@@ -630,6 +612,9 @@ func (m model) playingStatusStyle() lipgloss.Style {
 func (m model) nowPlayingTitleStyle() lipgloss.Style {
 	if m.playback.IsPlaying && m.accentColor != "" {
 		return nowPlayingHeroStyle.Copy().Foreground(lipgloss.Color(m.accentColor))
+	}
+	if !m.playback.IsPlaying {
+		return nowPlayingMutedStyle
 	}
 	return nowPlayingHeroStyle
 }

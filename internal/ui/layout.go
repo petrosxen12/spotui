@@ -140,7 +140,7 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 
 	pageVertical := paddingY * 2
 	playbarHeight := lipgloss.Height(m.playbarContainerStyle(tempLayout).Width(bodyWidth).Render(m.playbarView(tempLayout)))
-	dockHeight := lipgloss.Height(m.dockContainerStyle(tempLayout).Width(bodyWidth).Render(m.commandDockView(tempLayout)))
+	commandBarHeight := lipgloss.Height(m.commandBarContainerStyle().Width(bodyWidth).Render(m.commandBarView(tempLayout)))
 	footerHeight := 0
 	if footerVisible {
 		footerHeight = lipgloss.Height(m.footerPanel(mainWidth, tempLayout))
@@ -149,7 +149,7 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 	if footerVisible {
 		sectionGaps++
 	}
-	available := m.height - pageVertical - playbarHeight - footerHeight - dockHeight - sectionGaps
+	available := m.height - pageVertical - playbarHeight - footerHeight - commandBarHeight - sectionGaps
 	minListHeight := 1
 	if m.height >= 24 {
 		minListHeight = 6
@@ -189,7 +189,7 @@ func (m model) shouldShowContextRail() bool {
 
 func classifyHeightMode(height int) layoutHeightMode {
 	switch {
-	case height < 18:
+	case height < 10:
 		return heightModeMinimal
 	case height < 24:
 		return heightModeCompact

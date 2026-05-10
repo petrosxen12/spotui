@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/petrosxen/spotui/internal/app"
@@ -48,8 +49,9 @@ func newModel(service app.PlayerService) model {
 	results.DisableQuitKeybindings()
 
 	input := textinput.New()
-	input.Placeholder = "Search tracks, playlists, or enter /pause /resume /next /prev /local start"
+	input.Placeholder = "search or /"
 	input.Prompt = "› "
+	input.Cursor.SetMode(cursor.CursorBlink)
 	input.Focus()
 	input.CharLimit = 256
 

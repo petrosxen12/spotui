@@ -69,6 +69,7 @@ type viewState struct {
 
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
+		textinput.Blink,
 		checkConnectionCmd(m.service),
 		fetchPlaybackCmd(m.service),
 		fetchLocalPlayerStatusCmd(m.service),
