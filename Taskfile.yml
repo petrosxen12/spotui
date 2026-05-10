@@ -35,3 +35,8 @@ tasks:
     desc: Verify the project builds
     cmds:
       - go build ./...
+
+  qa:tui-review:
+    desc: Generate multi-layout TUI QA review assets for AI/manual review
+    cmds:
+      - go run ./cmd/spotui-qareview --out ./docs/qa/tui-review

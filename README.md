@@ -10,6 +10,23 @@ Terminal Spotify controller with a CLI and Bubble Tea TUI, plus optional lightwe
 
 Raw terminal recording: [spotui-demo.cast](./docs/screenshots/spotui-demo.cast)
 
+## QA Review Bundle
+
+Generate a deterministic multi-layout TUI review bundle, separate from the main `spotui` binary:
+
+```bash
+task qa:tui-review
+```
+
+This writes review assets to `docs/qa/tui-review/`, including:
+
+- SVG screenshot-style renders for several terminal sizes
+- plain-text captures of each rendered TUI state
+- a `review-brief.md` prompt for AI or human QA review
+- a `manifest.json` index of scenarios and files
+
+Use this as a quality-control pass for visual polish, density, command clarity, and compact-layout behavior.
+
 ## Features
 
 - CLI and TUI in one binary

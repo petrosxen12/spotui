@@ -1,0 +1,13 @@
+● idle  ·  ● Petros Xen                               
+Nothing playing                                       
+─────────────  0:00 / 0:00                            
+┌──────────────────────────────────────────────────┐  
+│   /local start  start the lightweight local      │  
+│ player                                           │  
+│ › /local use  start and select the local player  │  
+│   /local status  show local-player status        │  
+│   /local reset  clear runtime metadata           │  
+│ › /local                                         │  
+└──────────────────────────────────────────────────┘  
+Local player unavailable: spotifyd binary not found   
+Local player: unavailable  ·  spotifyd binary not fou…
