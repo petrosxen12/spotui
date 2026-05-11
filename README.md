@@ -27,6 +27,19 @@ This writes review assets to `docs/qa/tui-review/`, including:
 
 Use this as a quality-control pass for visual polish, density, command clarity, and compact-layout behavior.
 
+PRs that change TUI surfaces can also run the GitHub Actions `TUI Review` workflow, which:
+
+- generates the bundle in CI
+- rasterizes the SVG renders to PNG for multimodal review
+- calls OpenAI with the bundle plus an agent-facing review prompt
+- posts a sticky PR comment with a strict JSON handoff for follow-on AI implementor agents
+- fails CI only on blocker-level findings
+
+Repository setup for this workflow:
+
+- configure `OPENAI_API_KEY` in GitHub Actions secrets
+- adjust the default model in `.github/workflows/tui-review.yml` if needed
+
 ## Features
 
 - CLI and TUI in one binary

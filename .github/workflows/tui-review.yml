@@ -1,0 +1,366 @@
+name: TUI Review
+
+on:
+  pull_request:
+    paths:
+      - "internal/ui/**"
+      - "cmd/spotui-qareview/**"
+      - ".github/workflows/tui-review.yml"
+      - "docs/qa/tui-review-agent-prompt.md"
+      - "docs/qa/tui-review-agent-schema.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  tui-review:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      TUI_REVIEW_DIR: .tmp/tui-review
+      OPENAI_MODEL: gpt-4.1
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install SVG rasterizer
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: Run targeted tests
+        run: go test ./internal/ui ./cmd/spotui-qareview
+
+      - name: Generate TUI review bundle
+        run: go run ./cmd/spotui-qareview --out "$TUI_REVIEW_DIR"
+
+      - name: Convert SVG bundle images to PNG
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for svg in "$TUI_REVIEW_DIR"/*.svg; do
+            png="${svg%.svg}.png"
+            rsvg-convert "$svg" -o "$png"
+          done
+
+      - name: Run OpenAI TUI review
+        id: review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "OPENAI_API_KEY is not configured." >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+          import sys
+          import urllib.error
+          import urllib.request
+
+          bundle_dir = pathlib.Path(os.environ["TUI_REVIEW_DIR"])
+          manifest = json.loads((bundle_dir / "manifest.json").read_text())
+          brief = (bundle_dir / "review-brief.md").read_text()
+          prompt = pathlib.Path("docs/qa/tui-review-agent-prompt.md").read_text()
+          schema = json.loads(pathlib.Path("docs/qa/tui-review-agent-schema.json").read_text())
+
+          scenarios = manifest.get("scenarios", [])
+          if not scenarios:
+              raise SystemExit("manifest.json contains no scenarios")
+
+          content = [{
+              "type": "input_text",
+              "text": "\n\n".join([
+                  prompt,
+                  "Bundle review brief:\n" + brief,
+                  "Bundle generated_at: " + manifest.get("generated_at", ""),
+                  "Review all scenarios. Use only the provided scenario IDs."
+              ])
+          }]
+
+          for scenario in scenarios:
+              text_path = bundle_dir / scenario["text_file"]
+              png_path = bundle_dir / scenario["svg_file"].replace(".svg", ".png")
+              if not text_path.exists():
+                  raise SystemExit(f"Missing text capture for {scenario['id']}: {text_path}")
+              if not png_path.exists():
+                  raise SystemExit(f"Missing PNG render for {scenario['id']}: {png_path}")
+
+              content.append({
+                  "type": "input_text",
+                  "text": "\n".join([
+                      f"Scenario ID: {scenario['id']}",
+                      f"Title: {scenario['title']}",
+                      f"Size: {scenario['width']}x{scenario['height']}",
+                      f"Focus: {scenario['focus']}",
+                      f"Description: {scenario['description']}",
+                      "Terminal capture:",
+                      "```text",
+                      text_path.read_text().rstrip("\n"),
+                      "```"
+                  ])
+              })
+              encoded = base64.b64encode(png_path.read_bytes()).decode("ascii")
+              content.append({
+                  "type": "input_image",
+                  "image_url": f"data:image/png;base64,{encoded}"
+              })
+
+          body = {
+              "model": os.environ.get("OPENAI_MODEL", "gpt-4.1"),
+              "instructions": "Return only JSON matching the provided schema.",
+              "input": [{
+                  "role": "user",
+                  "content": content
+              }],
+              "text": {
+                  "format": {
+                      "type": "json_schema",
+                      "name": "spotui_tui_review",
+                      "strict": True,
+                      "schema": schema
+                  }
+              }
+          }
+
+          req = urllib.request.Request(
+              "https://api.openai.com/v1/responses",
+              data=json.dumps(body).encode("utf-8"),
+              headers={
+                  "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
+                  "Content-Type": "application/json"
+              },
+              method="POST"
+          )
+
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  response = json.loads(resp.read().decode("utf-8"))
+          except urllib.error.HTTPError as exc:
+              detail = exc.read().decode("utf-8", errors="replace")
+              raise SystemExit(f"OpenAI request failed: {exc.code} {detail}") from exc
+
+          output_text = (response.get("output_text") or "").strip()
+          if not output_text:
+              chunks = []
+              for item in response.get("output", []):
+                  for entry in item.get("content", []):
+                      if entry.get("type") == "output_text" and entry.get("text"):
+                          chunks.append(entry["text"])
+                      if entry.get("type") == "refusal" and entry.get("refusal"):
+                          raise SystemExit(f"Model refused review: {entry['refusal']}")
+              output_text = "".join(chunks).strip()
+          if not output_text:
+              raise SystemExit("OpenAI response did not contain JSON output")
+
+          try:
+              report = json.loads(output_text)
+          except json.JSONDecodeError as exc:
+              raise SystemExit(f"OpenAI output was not valid JSON: {exc}") from exc
+
+          valid_ids = {scenario["id"] for scenario in scenarios}
+          allowed_verdicts = {"ship", "ship_with_fixes", "needs_another_pass"}
+          allowed_confidence = {"high", "medium", "low"}
+          if report.get("schema_version") != "1":
+              raise SystemExit("schema_version must be '1'")
+          if report.get("review_type") != "tui_ui_ux":
+              raise SystemExit("review_type must be 'tui_ui_ux'")
+          if report.get("persona") != "apple_terminal_ui_ux_designer":
+              raise SystemExit("persona must be 'apple_terminal_ui_ux_designer'")
+          if report.get("overall_verdict") not in allowed_verdicts:
+              raise SystemExit("overall_verdict is invalid")
+          if not str(report.get("summary", "")).strip():
+              raise SystemExit("summary must not be empty")
+
+          handoff = report.get("implementation_handoff") or {}
+          if not str(handoff.get("audience", "")).strip():
+              raise SystemExit("implementation_handoff.audience must not be empty")
+          if not str(handoff.get("global_objective", "")).strip():
+              raise SystemExit("implementation_handoff.global_objective must not be empty")
+          if not isinstance(handoff.get("success_definition"), list) or not handoff["success_definition"]:
+              raise SystemExit("implementation_handoff.success_definition must be a non-empty array")
+
+          findings = report.get("findings")
+          if not isinstance(findings, list):
+              raise SystemExit("findings must be an array")
+          seen_finding_ids = set()
+          blocker_count = 0
+          for index, finding in enumerate(findings):
+              fid = str(finding.get("id", "")).strip()
+              if not fid:
+                  raise SystemExit(f"findings[{index}].id must not be empty")
+              if fid in seen_finding_ids:
+                  raise SystemExit(f"duplicate finding id: {fid}")
+              seen_finding_ids.add(fid)
+              severity = finding.get("severity")
+              if severity not in {"blocker", "polish"}:
+                  raise SystemExit(f"findings[{index}].severity is invalid")
+              if severity == "blocker":
+                  blocker_count += 1
+              for field in ("title", "problem", "rationale", "requested_change", "acceptance_criteria"):
+                  if not str(finding.get(field, "")).strip():
+                      raise SystemExit(f"findings[{index}].{field} must not be empty")
+              if finding.get("confidence") not in allowed_confidence:
+                  raise SystemExit(f"findings[{index}].confidence is invalid")
+              if not isinstance(finding.get("implementation_notes"), list):
+                  raise SystemExit(f"findings[{index}].implementation_notes must be an array")
+              if not isinstance(finding.get("preserve"), list):
+                  raise SystemExit(f"findings[{index}].preserve must be an array")
+              scenario_ids = finding.get("scenarios")
+              if not isinstance(scenario_ids, list) or not scenario_ids:
+                  raise SystemExit(f"findings[{index}].scenarios must be a non-empty array")
+              unknown = [value for value in scenario_ids if value not in valid_ids]
+              if unknown:
+                  raise SystemExit(f"findings[{index}] references unknown scenarios: {unknown}")
+
+          score_entries = report.get("scenario_scores")
+          if not isinstance(score_entries, list) or len(score_entries) != len(valid_ids):
+              raise SystemExit("scenario_scores must include one entry for each scenario")
+          seen_scores = set()
+          for index, score_entry in enumerate(score_entries):
+              scenario_id = score_entry.get("scenario")
+              if scenario_id not in valid_ids:
+                  raise SystemExit(f"scenario_scores[{index}] references unknown scenario: {scenario_id}")
+              if scenario_id in seen_scores:
+                  raise SystemExit(f"duplicate scenario score for: {scenario_id}")
+              seen_scores.add(scenario_id)
+              score = score_entry.get("score")
+              if not isinstance(score, int) or score < 1 or score > 5:
+                  raise SystemExit(f"scenario_scores[{index}].score must be an integer between 1 and 5")
+              if not str(score_entry.get("notes", "")).strip():
+                  raise SystemExit(f"scenario_scores[{index}].notes must not be empty")
+
+          verdict = report["overall_verdict"]
+          ci_status = "fail" if blocker_count > 0 or verdict == "needs_another_pass" else "pass"
+          report["ci_status"] = ci_status
+          report["bundle_generated_at"] = manifest.get("generated_at", "")
+
+          report_path = bundle_dir / "review-report.json"
+          report_path.write_text(json.dumps(report, indent=2) + "\n")
+
+          blockers = [f for f in findings if f["severity"] == "blocker"]
+          polish = [f for f in findings if f["severity"] == "polish"]
+
+          summary_lines = [
+              f"## spotui TUI review: `{verdict}`",
+              "",
+              report["summary"],
+              "",
+              f"- CI status: `{ci_status}`",
+              f"- Blockers: {len(blockers)}",
+              f"- Polish items: {len(polish)}",
+              "",
+              "### Blockers",
+              ""
+          ]
+          if blockers:
+              for finding in blockers:
+                  summary_lines.append(f"- `{finding['id']}` [{', '.join(finding['scenarios'])}] {finding['title']}")
+                  summary_lines.append(f"  Requested change: {finding['requested_change']}")
+                  summary_lines.append(f"  Acceptance criteria: {finding['acceptance_criteria']}")
+          else:
+              summary_lines.append("- None.")
+          summary_lines.extend(["", "### Polish", ""])
+          if polish:
+              for finding in polish:
+                  summary_lines.append(f"- `{finding['id']}` [{', '.join(finding['scenarios'])}] {finding['title']}")
+                  summary_lines.append(f"  Requested change: {finding['requested_change']}")
+                  summary_lines.append(f"  Acceptance criteria: {finding['acceptance_criteria']}")
+          else:
+              summary_lines.append("- None.")
+          summary = "\n".join(summary_lines) + "\n"
+          summary_path = bundle_dir / "review-summary.md"
+          summary_path.write_text(summary)
+
+          comment = "\n".join([
+              "<!-- spotui-tui-review:start -->",
+              summary.rstrip(),
+              "",
+              "```json",
+              json.dumps(report, indent=2),
+              "```",
+              "<!-- spotui-tui-review:end -->",
+              ""
+          ])
+          comment_path = bundle_dir / "review-comment.md"
+          comment_path.write_text(comment)
+
+          github_output = pathlib.Path(os.environ["GITHUB_OUTPUT"])
+          with github_output.open("a", encoding="utf-8") as fh:
+              fh.write(f"ci_status={ci_status}\n")
+              fh.write(f"report_path={report_path}\n")
+              fh.write(f"summary_path={summary_path}\n")
+              fh.write(f"comment_path={comment_path}\n")
+          PY
+
+      - name: Publish sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          COMMENT_PATH: ${{ steps.review.outputs.comment_path }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- spotui-tui-review:start -->';
+            const body = fs.readFileSync(process.env.COMMENT_PATH, 'utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100
+            });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body
+              });
+            }
+
+      - name: Upload review outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-review-output
+          path: |
+            ${{ env.TUI_REVIEW_DIR }}/manifest.json
+            ${{ env.TUI_REVIEW_DIR }}/review-brief.md
+            ${{ env.TUI_REVIEW_DIR }}/*.txt
+            ${{ env.TUI_REVIEW_DIR }}/*.svg
+            ${{ env.TUI_REVIEW_DIR }}/*.png
+            ${{ steps.review.outputs.report_path }}
+            ${{ steps.review.outputs.summary_path }}
+            ${{ steps.review.outputs.comment_path }}
+
+      - name: Fail on blocker findings
+        if: steps.review.outputs.ci_status != 'pass'
+        run: |
+          echo "TUI review reported blocker findings or requested another pass." >&2
+          exit 1
+
+  tui-review-fork-note:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip review for forked PRs
+        run: echo "Skipping TUI review because OPENAI_API_KEY is not exposed to forked pull requests."
