@@ -40,3 +40,8 @@ tasks:
     desc: Generate multi-layout TUI QA review assets for AI/manual review
     cmds:
       - go run ./cmd/spotui-qareview --out ./docs/qa/tui-review
+
+  qa:eval:
+    desc: Run TUI review eval against committed fixture bundle-001 (requires OPENAI_API_KEY)
+    cmds:
+      - python review/tui_review.py --bundle review/evals/fixtures/bundle-001 --prompt-set review/prompts/tui-review-prompt-set.json --out review/evals/results/bundle-001 --write-summary

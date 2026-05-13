@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "model": "gpt-4.1",
+  "files": {
+    "persona_prompt": "review/prompts/tui-review-agent-prompt.md",
+    "task_directive": "review/prompts/tui-review-task-directive.md",
+    "instructions": "review/prompts/tui-review-agent-instructions.md",
+    "scenario_template": "review/prompts/tui-review-scenario-template.md",
+    "schema": "review/prompts/tui-review-agent-schema.json"
+  }
+}

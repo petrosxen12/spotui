@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-05-10T15:43:47Z",
+  "scenarios": [
+    {
+      "id": "desktop-search",
+      "title": "Desktop Search Flow",
+      "width": 144,
+      "height": 34,
+      "focus": "Assess information hierarchy, whitespace, and right-rail usefulness on a wide layout.",
+      "description": "Wide layout with context rail, active playback, search results, and a visible next-up state.",
+      "text_file": "desktop-search.txt",
+      "svg_file": "desktop-search.svg"
+    },
+    {
+      "id": "laptop-devices",
+      "title": "Laptop Device Picker",
+      "width": 108,
+      "height": 26,
+      "focus": "Check scanability of the device list and whether the command/status surfaces feel calm rather than busy.",
+      "description": "Mid-width device view with an active device, local-player metadata, and the command dock in focus.",
+      "text_file": "laptop-devices.txt",
+      "svg_file": "laptop-devices.svg"
+    },
+    {
+      "id": "compact-local-player",
+      "title": "Compact Local Player Bootstrap",
+      "width": 72,
+      "height": 18,
+      "focus": "Inspect density and whether the compact layout still feels deliberate instead of cramped.",
+      "description": "Compact terminal with no active playback device and the local player in a transitional state.",
+      "text_file": "compact-local-player.txt",
+      "svg_file": "compact-local-player.svg"
+    },
+    {
+      "id": "narrow-command-suggestions",
+      "title": "Narrow Command Suggestions",
+      "width": 54,
+      "height": 14,
+      "focus": "Check whether autocomplete remains legible and controlled in a narrow terminal without visual spill or confusion.",
+      "description": "Narrow layout with command suggestions open and long command descriptions under pressure.",
+      "text_file": "narrow-command-suggestions.txt",
+      "svg_file": "narrow-command-suggestions.svg"
+    }
+  ]
+}
