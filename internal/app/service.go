@@ -414,10 +414,12 @@ func (s *Service) LocalPlayerStatus(ctx context.Context) (LocalPlayerStatus, err
 		LogPath:        status.RuntimeFiles.LogPath,
 	}
 
-	if device, ok := findDeviceByName(status.DeviceName, s.mustListDevices(ctx)); ok {
-		appStatus.Device = LocalPlayerDevice{ID: device.ID, Name: device.Name}
-		if appStatus.Message.Text == "" {
-			appStatus.Message = LocalPlayerMessage{Text: fmt.Sprintf("Local player available as %s", device.Name)}
+	if status.DeviceName != "" {
+		if device, ok := findDeviceByName(status.DeviceName, s.mustListDevices(ctx)); ok {
+			appStatus.Device = LocalPlayerDevice{ID: device.ID, Name: device.Name}
+			if appStatus.Message.Text == "" {
+				appStatus.Message = LocalPlayerMessage{Text: fmt.Sprintf("Local player available as %s", device.Name)}
+			}
 		}
 	}
 

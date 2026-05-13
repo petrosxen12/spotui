@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	playbackPollActive   = 1500 * time.Millisecond
-	playbackPollIdle     = 4 * time.Second
-	playbackPollNoDevice = 6 * time.Second
+	playbackPollActive      = 1500 * time.Millisecond
+	playbackPollIdle        = 4 * time.Second
+	playbackPollNoDevice    = 6 * time.Second
+	localPlayerPollInterval = 30 * time.Second
 )
 
 func Run(service app.PlayerService) error {
