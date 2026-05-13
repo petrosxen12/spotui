@@ -258,6 +258,12 @@ func pollPlaybackCmd(interval time.Duration) tea.Cmd {
 	})
 }
 
+func pollLocalPlayerCmd(interval time.Duration) tea.Cmd {
+	return tea.Tick(interval, func(time.Time) tea.Msg {
+		return localPlayerPollTickMsg{}
+	})
+}
+
 func bootAnimationCmd() tea.Cmd {
 	return tea.Tick(180*time.Millisecond, func(time.Time) tea.Msg {
 		return bootAnimationMsg{}

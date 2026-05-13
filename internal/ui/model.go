@@ -73,6 +73,7 @@ func (m model) Init() tea.Cmd {
 		checkConnectionCmd(m.service),
 		fetchPlaybackCmd(m.service),
 		fetchLocalPlayerStatusCmd(m.service),
+		pollLocalPlayerCmd(localPlayerPollInterval),
 		bootAnimationCmd(),
 	)
 }
@@ -258,7 +259,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pollEvery = nextPollInterval(msg.state)
 			m.clearBanner()
 			if cmd := m.refreshAccentColor(); cmd != nil {
-				return m, tea.Batch(pollPlaybackCmd(m.pollEvery), fetchLocalPlayerStatusCmd(m.service), cmd)
+				return m, tea.Batch(pollPlaybackCmd(m.pollEvery), cmd)
 			}
 		} else {
 			m.pollFailures++
@@ -266,7 +267,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showBannerForError(msg.err)
 			m.pollEvery = nextPollIntervalForError(msg.err, m.pollFailures)
 		}
-		return m, tea.Batch(pollPlaybackCmd(m.pollEvery), fetchLocalPlayerStatusCmd(m.service))
+		return m, pollPlaybackCmd(m.pollEvery)
 	case bootAnimationMsg:
 		if m.bootAnimationDone {
 			return m, nil
@@ -279,10 +280,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, bootAnimationCmd()
 	case localPlayerStatusMsg:
 		if msg.err != nil {
-			return m, nil
+			return m, pollLocalPlayerCmd(localPlayerPollInterval)
 		}
 		m.localPlayer = msg.status
-		return m, nil
+		return m, pollLocalPlayerCmd(localPlayerPollInterval)
 	case localPlayerActionMsg:
 		if msg.err != nil {
 			m.setLastAction(msg.err.Error(), true)
@@ -317,6 +318,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(fetchPlaybackCmd(m.service), actionCmd)
 	case pollTickMsg:
 		return m, fetchPlaybackCmd(m.service)
+	case localPlayerPollTickMsg:
+		return m, fetchLocalPlayerStatusCmd(m.service)
 	}
 
 	var cmd tea.Cmd
