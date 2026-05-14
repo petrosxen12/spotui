@@ -1,0 +1,381 @@
+name: TUI Autofix
+
+on:
+  workflow_run:
+    workflows: ["TUI Review"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  TUI_REVIEW_DIR: .tmp/tui-review
+  OPENAI_MODEL: gpt-4.1
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    # Only run when triggered by a PR-based review run on a non-autofix branch.
+    # The !startsWith condition prevents tui-autofix from cascading on its own output.
+    if: |
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.conclusion == 'success' ||
+       github.event.workflow_run.conclusion == 'failure') &&
+      !startsWith(github.event.workflow_run.head_branch, 'tui-autofix/')
+
+    steps:
+      - name: Download review artifacts
+        id: download
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: tui-review-output
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: .tmp/tui-review
+
+      - name: Parse findings and emit outputs
+        id: check
+        if: steps.download.outcome == 'success'
+        env:
+          WORKFLOW_RUN_PRS: ${{ toJson(github.event.workflow_run.pull_requests) }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, sys
+
+          report_path = pathlib.Path(".tmp/tui-review/review-report.json")
+          if not report_path.exists():
+              print("No review-report.json found — skipping autofix.", file=sys.stderr)
+              pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a").write("has_findings=false\n")
+              sys.exit(0)
+
+          report = json.loads(report_path.read_text())
+          findings = report.get("findings", [])
+          verdict = report.get("overall_verdict", "")
+
+          prs = json.loads(os.environ.get("WORKFLOW_RUN_PRS", "[]"))
+          pr_number = str(prs[0]["number"]) if prs else ""
+          head_branch = os.environ.get("WORKFLOW_RUN_HEAD_BRANCH", "")
+          head_sha = os.environ.get("WORKFLOW_RUN_HEAD_SHA", "")
+
+          with pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a") as fh:
+              fh.write(f"has_findings={'true' if findings else 'false'}\n")
+              fh.write(f"finding_count={len(findings)}\n")
+              fh.write(f"verdict={verdict}\n")
+              fh.write(f"pr_number={pr_number}\n")
+              fh.write(f"head_branch={head_branch}\n")
+              fh.write(f"head_sha={head_sha}\n")
+              fh.write(f"autofix_branch=tui-autofix/pr-{pr_number}\n")
+          PY
+
+      - name: Check out PR head
+        if: steps.check.outputs.has_findings == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.check.outputs.head_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git
+        if: steps.check.outputs.has_findings == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Copy before SVGs from artifact
+        if: steps.check.outputs.has_findings == 'true'
+        run: |
+          mkdir -p docs/qa/tui-review-before
+          cp .tmp/tui-review/*.svg docs/qa/tui-review-before/ 2>/dev/null || true
+
+      - name: Set up Go
+        if: steps.check.outputs.has_findings == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        if: steps.check.outputs.has_findings == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install system dependencies
+        if: steps.check.outputs.has_findings == 'true'
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: Install Claude Code
+        if: steps.check.outputs.has_findings == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Agentic fix loop
+        id: loop
+        if: steps.check.outputs.has_findings == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          MAX_ITERATIONS=3
+          FINAL_VERDICT=""
+          ITERATIONS=0
+
+          # Write prompt-builder to a temp file to avoid heredoc nesting
+          cat > /tmp/build_prompt.py << 'PYEOF'
+          import json, pathlib
+
+          agent_prompt = pathlib.Path("review/prompts/tui-autofix-agent-prompt.md").read_text()
+          report = json.loads(pathlib.Path(".tmp/tui-review/review-report.json").read_text())
+          findings = report.get("findings", [])
+          blockers = [f for f in findings if f["severity"] == "blocker"]
+          polish = [f for f in findings if f["severity"] == "polish"]
+
+          lines = [agent_prompt, "", "---", "", "## Findings to implement", ""]
+
+          if blockers:
+              lines.append("### Blockers (fix first)\n")
+              for f in blockers:
+                  lines += [
+                      f"#### `{f['id']}` — {f['title']}",
+                      f"- **Problem:** {f['problem']}",
+                      f"- **Requested change:** {f['requested_change']}",
+                      f"- **Acceptance criteria:** {f['acceptance_criteria']}",
+                      f"- **Preserve:** {'; '.join(f.get('preserve', []))}",
+                      f"- **Implementation notes:** {'; '.join(f.get('implementation_notes', []))}",
+                      "",
+                  ]
+
+          if polish:
+              lines.append("### Polish\n")
+              for f in polish:
+                  lines += [
+                      f"#### `{f['id']}` — {f['title']}",
+                      f"- **Problem:** {f['problem']}",
+                      f"- **Requested change:** {f['requested_change']}",
+                      f"- **Acceptance criteria:** {f['acceptance_criteria']}",
+                      f"- **Preserve:** {'; '.join(f.get('preserve', []))}",
+                      f"- **Implementation notes:** {'; '.join(f.get('implementation_notes', []))}",
+                      "",
+                  ]
+
+          pathlib.Path(".tmp").mkdir(exist_ok=True)
+          pathlib.Path(".tmp/autofix-prompt.md").write_text("\n".join(lines))
+          PYEOF
+
+          for ITERATION in $(seq 1 "$MAX_ITERATIONS"); do
+            ITERATIONS=$ITERATION
+            echo "--- Iteration $ITERATION/$MAX_ITERATIONS ---"
+
+            python3 /tmp/build_prompt.py
+
+            claude --dangerously-skip-permissions --print "$(cat .tmp/autofix-prompt.md)"
+
+            mkdir -p .tmp/tui-review-iter
+            go run ./cmd/spotui-qareview --out .tmp/tui-review-iter
+
+            python review/tui_review.py \
+              --bundle .tmp/tui-review-iter \
+              --prompt-set review/prompts/tui-review-prompt-set.json \
+              --out .tmp/tui-review \
+              --require-rasterizer || true
+
+            VERDICT=$(python3 -c "
+          import json, pathlib
+          r = json.loads(pathlib.Path('.tmp/tui-review/review-report.json').read_text())
+          print(r.get('overall_verdict', ''))
+          ")
+            FINDING_COUNT=$(python3 -c "
+          import json, pathlib
+          r = json.loads(pathlib.Path('.tmp/tui-review/review-report.json').read_text())
+          print(len(r.get('findings', [])))
+          ")
+            FINAL_VERDICT="$VERDICT"
+
+            echo "Verdict after iteration $ITERATION: $VERDICT (findings remaining: $FINDING_COUNT)"
+
+            if [ "$VERDICT" = "ship" ] || [ "$FINDING_COUNT" = "0" ]; then
+              echo "All findings resolved."
+              break
+            fi
+          done
+
+          echo "final_verdict=$FINAL_VERDICT" >> "$GITHUB_OUTPUT"
+          echo "iterations=$ITERATIONS" >> "$GITHUB_OUTPUT"
+
+      - name: Check for changes
+        id: changes
+        if: steps.check.outputs.has_findings == 'true'
+        run: |
+          if git diff --quiet HEAD; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Copy after SVGs and push autofix branch
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          AUTOFIX_BRANCH: ${{ steps.check.outputs.autofix_branch }}
+          PR_NUMBER: ${{ steps.check.outputs.pr_number }}
+          FINAL_VERDICT: ${{ steps.loop.outputs.final_verdict }}
+          ITERATIONS: ${{ steps.loop.outputs.iterations }}
+          FINDING_COUNT: ${{ steps.check.outputs.finding_count }}
+        run: |
+          mkdir -p docs/qa/tui-review-after
+          cp .tmp/tui-review-iter/*.svg docs/qa/tui-review-after/ 2>/dev/null || true
+
+          git checkout -b "$AUTOFIX_BRANCH" 2>/dev/null || git checkout "$AUTOFIX_BRANCH"
+          git add -A
+          git commit -m "$(cat <<EOF
+          fix(tui): implement TUI review suggestions for PR #${PR_NUMBER}
+
+          Autofix verdict: ${FINAL_VERDICT} (${ITERATIONS} iteration(s))
+          Findings addressed: ${FINDING_COUNT}
+          EOF
+          )"
+          git push -u origin "$AUTOFIX_BRANCH" --force
+
+      - name: Build PR body
+        id: pr_body
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          PR_NUMBER: ${{ steps.check.outputs.pr_number }}
+          VERDICT: ${{ steps.check.outputs.verdict }}
+          FINAL_VERDICT: ${{ steps.loop.outputs.final_verdict }}
+          ITERATIONS: ${{ steps.loop.outputs.iterations }}
+          FINDING_COUNT: ${{ steps.check.outputs.finding_count }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+
+          report = json.loads(pathlib.Path(".tmp/tui-review/review-report.json").read_text())
+          manifest = json.loads(pathlib.Path(".tmp/tui-review-iter/manifest.json").read_text())
+          findings = report.get("findings", [])
+          blockers = [f for f in findings if f["severity"] == "blocker"]
+          polish = [f for f in findings if f["severity"] == "polish"]
+
+          pr_number = os.environ["PR_NUMBER"]
+          verdict = os.environ["VERDICT"]
+          final_verdict = os.environ["FINAL_VERDICT"]
+          iterations = os.environ["ITERATIONS"]
+          finding_count = os.environ["FINDING_COUNT"]
+
+          lines = [
+              "## TUI Autofix: Implementing AI Review Suggestions",
+              "",
+              f"Automated implementation of {finding_count} finding(s) from PR #{pr_number} "
+              f"(original verdict: `{verdict}`).",
+              f"**Autofix result:** `{final_verdict}` after {iterations} iteration(s).",
+              "",
+              "---",
+              "",
+              "### Changes Implemented",
+              "",
+          ]
+
+          if blockers:
+              lines.append("#### Blockers Fixed\n")
+              for f in blockers:
+                  lines += [
+                      f"- **`{f['id']}`** — {f['title']}",
+                      f"  - *Change:* {f['requested_change']}",
+                      f"  - *Acceptance:* {f['acceptance_criteria']}",
+                  ]
+              lines.append("")
+
+          if polish:
+              lines.append("#### Polish Applied\n")
+              for f in polish:
+                  lines += [
+                      f"- **`{f['id']}`** — {f['title']}",
+                      f"  - *Change:* {f['requested_change']}",
+                  ]
+              lines.append("")
+
+          lines += [
+              "---",
+              "",
+              "### Before / After Screenshots",
+              "",
+              "| Scenario | Before | After |",
+              "|----------|--------|-------|",
+          ]
+
+          for s in manifest["scenarios"]:
+              sid = s["id"]
+              title = s["title"]
+              lines.append(
+                  f"| **{title}** "
+                  f"| ![before](docs/qa/tui-review-before/{sid}.svg) "
+                  f"| ![after](docs/qa/tui-review-after/{sid}.svg) |"
+              )
+
+          lines += [
+              "",
+              "---",
+              "",
+              "> Generated automatically by the TUI Autofix workflow.",
+              "> SVGs are committed to this branch and rendered inline by GitHub.",
+          ]
+
+          pathlib.Path(".tmp").mkdir(exist_ok=True)
+          pathlib.Path(".tmp/pr-body.md").write_text("\n".join(lines) + "\n")
+          PY
+
+      - name: Create or update autofix PR
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        env:
+          AUTOFIX_BRANCH: ${{ steps.check.outputs.autofix_branch }}
+          HEAD_BRANCH: ${{ steps.check.outputs.head_branch }}
+          PR_NUMBER: ${{ steps.check.outputs.pr_number }}
+          FINDING_COUNT: ${{ steps.check.outputs.finding_count }}
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('.tmp/pr-body.md', 'utf8');
+            const autofixBranch = process.env.AUTOFIX_BRANCH;
+            const headBranch = process.env.HEAD_BRANCH;
+            const prNumber = parseInt(process.env.PR_NUMBER);
+            const findingCount = process.env.FINDING_COUNT;
+            const { owner, repo } = context.repo;
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              head: `${owner}:${autofixBranch}`,
+            });
+
+            let autofixPrUrl;
+            if (prs.length > 0) {
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: prs[0].number,
+                body,
+              });
+              autofixPrUrl = prs[0].html_url;
+              console.log(`Updated existing autofix PR: ${autofixPrUrl}`);
+            } else {
+              const { data: pr } = await github.rest.pulls.create({
+                owner,
+                repo,
+                title: `fix(tui): implement ${findingCount} TUI review suggestion(s) for PR #${prNumber}`,
+                head: autofixBranch,
+                base: headBranch,
+                body,
+              });
+              autofixPrUrl = pr.html_url;
+              console.log(`Created autofix PR: ${autofixPrUrl}`);
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: `## TUI Autofix\n\nI've implemented the TUI review suggestions in ${autofixPrUrl}.\n\nThe autofix PR targets \`${headBranch}\` and includes before/after screenshots for all review scenarios.`,
+            });
