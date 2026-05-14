@@ -5,8 +5,7 @@ on:
     paths:
       - "internal/ui/**"
       - "cmd/spotui-qareview/**"
-      - ".github/workflows/tui-review.yml"
-      - "review/prompts/**"
+      - "review/prompts/tui-review-*"
       - "review/tui_review.py"
   workflow_dispatch:
 
