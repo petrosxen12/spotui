@@ -19,13 +19,22 @@ import (
 func (m *model) refreshAccentColor() tea.Cmd {
 	if m.playback.AlbumArtURL == "" {
 		m.accentColor = ""
+		m.accentColorPending = ""
 		return nil
 	}
 	if cached, ok := m.accentColorCache[m.playback.AlbumArtURL]; ok {
 		m.accentColor = cached
+		m.accentColorPending = ""
 		return nil
 	}
-	m.accentColor = ""
+	// A fetch for this exact URL is already in flight (started on an earlier poll tick).
+	// Don't reset accentColor or refire the fetch — this call runs on every playback poll,
+	// so without this check the UI would flash blank on every tick until the fetch (which
+	// can easily take longer than one poll interval) finally resolves.
+	if m.accentColorPending == m.playback.AlbumArtURL {
+		return nil
+	}
+	m.accentColorPending = m.playback.AlbumArtURL
 	return fetchAccentColorCmd(m.playback.AlbumArtURL)
 }
 

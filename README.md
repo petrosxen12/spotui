@@ -10,6 +10,12 @@ Terminal Spotify controller with a CLI and Bubble Tea TUI, plus optional lightwe
 
 Raw terminal recording: [spotui-demo.cast](./docs/screenshots/spotui-demo.cast)
 
+Adaptive layout, live in a resized split pane alongside another program:
+
+![spotui adaptive resizing demo](./docs/screenshots/spotui-resize-demo.gif)
+
+Raw terminal recording: [spotui-resize-demo.cast](./docs/screenshots/spotui-resize-demo.cast)
+
 ## QA Review Bundle
 
 Generate a deterministic multi-layout TUI review bundle, separate from the main `spotui` binary:
@@ -49,6 +55,7 @@ Repository setup for this workflow:
 - Optional managed local playback with `spotifyd`
 - Fuzzy matching for `/device` and `/play`
 - Inline autocomplete and ghost completion
+- Adaptive layout that reflows cleanly from a wide terminal down to a narrow split pane
 - Polling backoff for no-device, network, and rate-limit states
 - Clear error messages for auth expiry, Premium requirements, and connectivity issues
 

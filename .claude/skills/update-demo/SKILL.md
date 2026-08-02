@@ -53,6 +53,26 @@ asciinema cat docs/screenshots/spotui-demo.cast | tail -40
 - Do not touch `docs/screenshots/tui-overview.svg` / `tui-commands.svg` here — those are hand-curated with live
   Spotify data (see git history), not part of this flow.
 
+## Adaptive-layout (resize) demo
+
+`task demo:resize-record` runs `docs/screenshots/docker/record-demo-resize-showcase.sh` and produces
+`docs/screenshots/spotui-resize-demo.cast` / `.gif`, showing spotui reflow live inside a shrinking/growing tmux
+split pane alongside another program (`top`). Re-run this specifically when layout/reflow behavior changes
+(not for every UI change — most changes only warrant re-running `task demo:record`).
+
+That script uses a different technique from `record-demo.sh`: an inner tmux session holds the actual
+split-pane layout, and a separate session records `tmux attach` to it, so the recording captures the whole
+pane layout rather than just spotui's own pty. Only ever use `tmux resize-pane` (redistributes columns between
+panes within a fixed window size) inside it, never `tmux resize-window` (changes the overall terminal size) —
+the installed asciinema version doesn't record live terminal-size changes into the cast, so a whole-window
+resize desyncs the recording from what `agg` renders into silently misaligned frames. See the comments in
+`record-demo-resize-showcase.sh` for the full explanation.
+
+Also watch out for `Escape` after a search: it closes an open suggestion panel on the first press, but a
+second press falls through to `popViewState()` and silently pops back to the pre-search view if one was
+already pushed — losing the results for the rest of the recording. Use `Tab` to move focus back onto the
+results list instead of a second `Escape`.
+
 ## 5. Verify
 
 ```bash

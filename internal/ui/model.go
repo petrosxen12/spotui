@@ -22,37 +22,38 @@ const (
 )
 
 type model struct {
-	service           app.PlayerService
-	list              list.Model
-	input             textinput.Model
-	width             int
-	height            int
-	inputFocused      bool
-	connectionStatus  string
-	bannerText        string
-	bannerIsError     bool
-	lastAction        string
-	lastActionErr     bool
-	query             string
-	lastResults       app.Results
-	listMode          listMode
-	playback          app.PlaybackState
-	pollEvery         time.Duration
-	resultCount       int
-	suggestions       []suggestion
-	suggestionIndex   int
-	suggestionsOpen   bool
-	accentColor       string
-	accentColorCache  map[string]string
-	deviceCache       []app.Device
-	deviceCacheReady  bool
-	deviceCacheBusy   bool
-	localPlayer       localPlayerStatus
-	viewHistory       []viewState
-	pollFailures      int
-	lastActionUntil   time.Time
-	bootFrames        int
-	bootAnimationDone bool
+	service            app.PlayerService
+	list               list.Model
+	input              textinput.Model
+	width              int
+	height             int
+	inputFocused       bool
+	connectionStatus   string
+	bannerText         string
+	bannerIsError      bool
+	lastAction         string
+	lastActionErr      bool
+	query              string
+	lastResults        app.Results
+	listMode           listMode
+	playback           app.PlaybackState
+	pollEvery          time.Duration
+	resultCount        int
+	suggestions        []suggestion
+	suggestionIndex    int
+	suggestionsOpen    bool
+	accentColor        string
+	accentColorCache   map[string]string
+	accentColorPending string
+	deviceCache        []app.Device
+	deviceCacheReady   bool
+	deviceCacheBusy    bool
+	localPlayer        localPlayerStatus
+	viewHistory        []viewState
+	pollFailures       int
+	lastActionUntil    time.Time
+	bootFrames         int
+	bootAnimationDone  bool
 }
 
 type viewState struct {
@@ -297,6 +298,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearBanner()
 		return m, tea.Batch(actionCmd, fetchPlaybackCmd(m.service), fetchLocalPlayerStatusCmd(m.service))
 	case accentColorMsg:
+		if m.accentColorPending == msg.albumArtURL {
+			m.accentColorPending = ""
+		}
 		if msg.err != nil {
 			return m, nil
 		}
