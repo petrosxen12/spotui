@@ -33,6 +33,7 @@ func (m *Manager) GenerateConfig() ([]byte, error) {
 		"bitrate = " + strconv.Itoa(m.cfg.Bitrate),
 		"initial_volume = " + strconv.Itoa(m.cfg.InitialVolume),
 		"cache_path = " + strconv.Quote(m.files.CacheDir),
+		"use_mpris = " + strconv.FormatBool(m.cfg.UseMPRIS),
 	}
 	if strings.TrimSpace(m.cfg.AudioDevice) != "" {
 		lines = append(lines, "device = "+strconv.Quote(strings.TrimSpace(m.cfg.AudioDevice)))

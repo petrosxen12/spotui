@@ -19,6 +19,12 @@ import (
 
 const playlistCacheTTL = 60 * time.Second
 
+// localPlayerDeviceTimeout bounds how long we wait for a freshly started spotifyd to show
+// up in Spotify's device list. This is a separate, slower-moving REST endpoint from the
+// realtime Spotify Connect protocol spotifyd itself uses to authenticate, and in practice
+// needs meaningfully longer than the couple of seconds spotifyd takes to connect.
+const localPlayerDeviceTimeout = 30 * time.Second
+
 type PlayerService interface {
 	CurrentUser(ctx context.Context) (User, error)
 	Search(ctx context.Context, query string) (Results, error)
@@ -682,7 +688,7 @@ func (s *Service) noDeviceError(ctx context.Context) error {
 }
 
 func (s *Service) waitForLocalPlayerDevice(ctx context.Context) (Device, error) {
-	deadline := time.Now().Add(12 * time.Second)
+	deadline := time.Now().Add(localPlayerDeviceTimeout)
 	for {
 		devices, err := s.ListDevices(ctx)
 		if err == nil {
@@ -697,7 +703,7 @@ func (s *Service) waitForLocalPlayerDevice(ctx context.Context) (Device, error) 
 			}
 		}
 		if time.Now().After(deadline) {
-			return Device{}, fmt.Errorf("spotifyd started but did not appear as a Spotify device within 12s")
+			return Device{}, fmt.Errorf("spotifyd started but did not appear as a Spotify device within %s", localPlayerDeviceTimeout)
 		}
 
 		select {

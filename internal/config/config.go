@@ -53,6 +53,10 @@ type LocalPlayerConfig struct {
 	InitialVolume          int    `json:"initial_volume"`
 	SpotifydPath           string `json:"spotifyd_path"`
 	AutostartPromptEnabled bool   `json:"autostart_prompt_enabled"`
+	// UseMPRIS controls spotifyd's MPRIS (D-Bus media control) integration. It defaults
+	// to true for normal desktop use; disable it on systems with no D-Bus session bus
+	// (minimal servers, containers), where spotifyd would otherwise fail to start.
+	UseMPRIS bool `json:"use_mpris"`
 }
 
 func (cfg *LocalPlayerConfig) UnmarshalJSON(data []byte) error {
@@ -65,6 +69,7 @@ func (cfg *LocalPlayerConfig) UnmarshalJSON(data []byte) error {
 		InitialVolume          int    `json:"initial_volume"`
 		SpotifydPath           string `json:"spotifyd_path"`
 		AutostartPromptEnabled *bool  `json:"autostart_prompt_enabled"`
+		UseMPRIS               *bool  `json:"use_mpris"`
 	}
 
 	defaults := DefaultLocalPlayerConfig()
@@ -90,6 +95,9 @@ func (cfg *LocalPlayerConfig) UnmarshalJSON(data []byte) error {
 	if raw.AutostartPromptEnabled != nil {
 		cfg.AutostartPromptEnabled = *raw.AutostartPromptEnabled
 	}
+	if raw.UseMPRIS != nil {
+		cfg.UseMPRIS = *raw.UseMPRIS
+	}
 	cfg.ApplyDefaults()
 	return nil
 }
@@ -102,6 +110,7 @@ func DefaultLocalPlayerConfig() LocalPlayerConfig {
 		Bitrate:                320,
 		InitialVolume:          100,
 		AutostartPromptEnabled: true,
+		UseMPRIS:               true,
 	}
 }
 

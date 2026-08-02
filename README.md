@@ -241,6 +241,9 @@ Common causes:
 - unsupported backend in the installed `spotifyd` build
 - invalid `audio_device`
 - local audio stack mismatch
+- no D-Bus session bus available (minimal servers, containers): set
+  `"use_mpris": false` under `local_player` in `config.json` to disable
+  `spotifyd`'s MPRIS integration, which otherwise crashes shortly after connecting
 
 If needed, inspect the full log directly:
 
