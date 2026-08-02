@@ -45,14 +45,13 @@ type SearchItem struct {
 }
 
 type LocalPlayerConfig struct {
-	Enabled                bool   `json:"enabled"`
-	DeviceName             string `json:"device_name"`
-	Backend                string `json:"backend"`
-	AudioDevice            string `json:"audio_device"`
-	Bitrate                int    `json:"bitrate"`
-	InitialVolume          int    `json:"initial_volume"`
-	SpotifydPath           string `json:"spotifyd_path"`
-	AutostartPromptEnabled bool   `json:"autostart_prompt_enabled"`
+	Enabled       bool   `json:"enabled"`
+	DeviceName    string `json:"device_name"`
+	Backend       string `json:"backend"`
+	AudioDevice   string `json:"audio_device"`
+	Bitrate       int    `json:"bitrate"`
+	InitialVolume int    `json:"initial_volume"`
+	SpotifydPath  string `json:"spotifyd_path"`
 	// UseMPRIS controls spotifyd's MPRIS (D-Bus media control) integration. It defaults
 	// to true for normal desktop use; disable it on systems with no D-Bus session bus
 	// (minimal servers, containers), where spotifyd would otherwise fail to start.
@@ -61,15 +60,14 @@ type LocalPlayerConfig struct {
 
 func (cfg *LocalPlayerConfig) UnmarshalJSON(data []byte) error {
 	type rawLocalPlayerConfig struct {
-		Enabled                *bool  `json:"enabled"`
-		DeviceName             string `json:"device_name"`
-		Backend                string `json:"backend"`
-		AudioDevice            string `json:"audio_device"`
-		Bitrate                int    `json:"bitrate"`
-		InitialVolume          int    `json:"initial_volume"`
-		SpotifydPath           string `json:"spotifyd_path"`
-		AutostartPromptEnabled *bool  `json:"autostart_prompt_enabled"`
-		UseMPRIS               *bool  `json:"use_mpris"`
+		Enabled       *bool  `json:"enabled"`
+		DeviceName    string `json:"device_name"`
+		Backend       string `json:"backend"`
+		AudioDevice   string `json:"audio_device"`
+		Bitrate       int    `json:"bitrate"`
+		InitialVolume int    `json:"initial_volume"`
+		SpotifydPath  string `json:"spotifyd_path"`
+		UseMPRIS      *bool  `json:"use_mpris"`
 	}
 
 	defaults := DefaultLocalPlayerConfig()
@@ -92,9 +90,6 @@ func (cfg *LocalPlayerConfig) UnmarshalJSON(data []byte) error {
 	cfg.Bitrate = raw.Bitrate
 	cfg.InitialVolume = raw.InitialVolume
 	cfg.SpotifydPath = raw.SpotifydPath
-	if raw.AutostartPromptEnabled != nil {
-		cfg.AutostartPromptEnabled = *raw.AutostartPromptEnabled
-	}
 	if raw.UseMPRIS != nil {
 		cfg.UseMPRIS = *raw.UseMPRIS
 	}
@@ -104,13 +99,12 @@ func (cfg *LocalPlayerConfig) UnmarshalJSON(data []byte) error {
 
 func DefaultLocalPlayerConfig() LocalPlayerConfig {
 	return LocalPlayerConfig{
-		Enabled:                false,
-		DeviceName:             "spotui",
-		Backend:                "portaudio",
-		Bitrate:                320,
-		InitialVolume:          100,
-		AutostartPromptEnabled: true,
-		UseMPRIS:               true,
+		Enabled:       false,
+		DeviceName:    "spotui",
+		Backend:       "portaudio",
+		Bitrate:       320,
+		InitialVolume: 100,
+		UseMPRIS:      true,
 	}
 }
 
