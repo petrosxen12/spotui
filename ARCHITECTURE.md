@@ -8,6 +8,33 @@
 
 Both use the same service layer in `internal/app`. That layer owns playback workflows, device selection, search-result resolution, and local-player orchestration.
 
+## Diagram
+
+```mermaid
+graph TD
+    CLI["cmd/spotui<br/>Cobra CLI"]
+    TUI["internal/ui<br/>Bubble Tea TUI"]
+    APP["internal/app<br/>PlayerService"]
+    SPOTIFY["internal/spotify<br/>Spotify Web API client"]
+    AUTH["internal/auth<br/>PKCE login, token store"]
+    CONFIG["internal/config<br/>config.json, device prefs"]
+    SPOTIFYD["internal/spotifyd<br/>local player process"]
+    SPOTERR["internal/spoterr<br/>typed errors"]
+
+    CLI --> APP
+    TUI --> APP
+    APP --> SPOTIFY
+    APP --> AUTH
+    APP --> CONFIG
+    APP --> SPOTIFYD
+    SPOTIFY --> AUTH
+    SPOTIFY -.-> SPOTERR
+    APP -.-> SPOTERR
+
+    SPOTIFY --> API["Spotify Web API"]
+    SPOTIFYD --> DAEMON["spotifyd process"]
+```
+
 ## Package Boundaries
 
 ### `cmd/spotui`
