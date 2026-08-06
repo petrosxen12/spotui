@@ -94,8 +94,11 @@ var (
 	contextRailStyle = lipgloss.NewStyle().
 				BorderLeft(true).
 				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#58605C", Dark: "#626A66"}).
-				PaddingLeft(1)
+		// Muted further than the results panel's own borders — QA review flagged
+		// the rail's vertical rule as visually competing with the results column,
+		// which should read as the primary element.
+		BorderForeground(lipgloss.AdaptiveColor{Light: "#909691", Dark: "#454B47"}).
+		PaddingLeft(2)
 )
 
 func (m model) View() string {
@@ -117,7 +120,7 @@ func (m model) View() string {
 		mainContent = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			mainContent,
-			"   ",
+			"    ",
 			rail,
 		)
 	}
@@ -412,8 +415,11 @@ func (m model) contextRailView(layout layoutMetrics) string {
 		}
 	}
 
+	// A single blank line between each grouping read as visually dense in QA review — the
+	// rail's several short sections felt busy stacked tightly. Two blank lines gives each
+	// grouping clearer separation without changing what's shown or its order.
 	if selected := m.selectedContextLines(layout.railWidth); len(selected) > 0 {
-		lines = append(lines, "")
+		lines = append(lines, "", "")
 		lines = append(lines, subtitleStyle.Render("Selection"))
 		lines = append(lines, selected...)
 	}
@@ -421,24 +427,24 @@ func (m model) contextRailView(layout layoutMetrics) string {
 	if total := len(m.list.Items()); total > 0 {
 		index := clampInt(m.list.Index()+1, 1, total)
 		remaining := maxInt(0, total-index)
-		lines = append(lines, "")
+		lines = append(lines, "", "")
 		lines = append(lines, subtitleStyle.Render("List"))
 		lines = append(lines, infoStyle.Render(fmt.Sprintf("%d of %d", index, total)))
 		lines = append(lines, infoStyle.Render(fmt.Sprintf("%d left", remaining)))
 	}
 
 	if m.playback.Device.Name != "" {
-		lines = append(lines, "")
+		lines = append(lines, "", "")
 		lines = append(lines, subtitleStyle.Render("Output"))
 		lines = append(lines, infoStyle.Render(truncateText(m.playback.Device.Name, layout.railWidth)))
 	} else if line := m.localPlayer.statusLine(); line != "" {
-		lines = append(lines, "")
+		lines = append(lines, "", "")
 		lines = append(lines, subtitleStyle.Render("Local player"))
 		lines = append(lines, infoStyle.Render(truncateText(line, layout.railWidth)))
 	}
 
 	if m.playback.NextItemName != "" {
-		lines = append(lines, "")
+		lines = append(lines, "", "")
 		lines = append(lines, subtitleStyle.Render("Next"))
 		lines = append(lines, titleStyle.Render(truncateText(m.playback.NextItemName, layout.railWidth)))
 		if m.playback.NextArtistName != "" {
@@ -447,7 +453,7 @@ func (m model) contextRailView(layout layoutMetrics) string {
 	}
 
 	if depth := len(m.viewHistory); depth > 0 {
-		lines = append(lines, "")
+		lines = append(lines, "", "")
 		lines = append(lines, subtitleStyle.Render("Back"))
 		lines = append(lines, infoStyle.Render(fmt.Sprintf("esc × %d", depth)))
 	}

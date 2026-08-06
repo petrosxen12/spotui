@@ -86,8 +86,11 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 	railEnabled := false
 	railWidth := 0
 	if allowRail && m.shouldShowContextRail() && bodyWidth >= 118 && heightMode != heightModeMinimal && m.height >= 20 {
-		candidateRailWidth := clampInt(bodyWidth/5, 22, 28)
-		candidateMainWidth := bodyWidth - candidateRailWidth - 3
+		// Narrower and with a wider gutter than a first cut of this rail used — QA review
+		// flagged the wider rail as visually noisy, drawing attention away from the
+		// results column, which should dominate.
+		candidateRailWidth := clampInt(bodyWidth/6, 20, 24)
+		candidateMainWidth := bodyWidth - candidateRailWidth - 4
 		if candidateMainWidth >= 72 {
 			mainWidth = candidateMainWidth
 			railEnabled = true
