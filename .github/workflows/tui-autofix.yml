@@ -33,7 +33,7 @@ jobs:
           name: tui-review-output
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: .tmp/tui-review
+          path: ${{ runner.temp }}/tui-review
 
       - name: Parse findings and emit outputs
         id: check
@@ -42,11 +42,12 @@ jobs:
           WORKFLOW_RUN_PRS: ${{ toJson(github.event.workflow_run.pull_requests) }}
           WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          DOWNLOAD_DIR: ${{ runner.temp }}/tui-review
         run: |
           python - <<'PY'
           import json, os, pathlib, sys
 
-          report_path = pathlib.Path(".tmp/tui-review/review-report.json")
+          report_path = pathlib.Path(os.environ["DOWNLOAD_DIR"]) / "review-report.json"
           if not report_path.exists():
               print("No review-report.json found — skipping autofix.", file=sys.stderr)
               pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a").write("has_findings=false\n")
@@ -84,6 +85,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Restore review artifacts
+        if: steps.check.outputs.has_findings == 'true'
+        run: |
+          mkdir -p .tmp/tui-review
+          cp -r "${{ runner.temp }}/tui-review/." .tmp/tui-review/
 
       - name: Copy before SVGs from artifact
         if: steps.check.outputs.has_findings == 'true'
