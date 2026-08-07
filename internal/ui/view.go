@@ -96,7 +96,8 @@ var (
 				BorderStyle(lipgloss.NormalBorder()).
 		// Muted further than the results panel's own borders — QA review flagged
 		// the rail's vertical rule as visually competing with the results column,
-		// which should read as the primary element.
+		// which should read as the primary element. Kept close in tone to the page
+		// background rather than the border's original mid-gray, so it recedes.
 		BorderForeground(lipgloss.AdaptiveColor{Light: "#909691", Dark: "#454B47"}).
 		PaddingLeft(2)
 )
