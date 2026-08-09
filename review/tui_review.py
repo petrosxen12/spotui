@@ -14,7 +14,6 @@ import os
 import pathlib
 import shutil
 import subprocess
-import sys
 import tempfile
 import urllib.error
 import urllib.request
@@ -432,8 +431,12 @@ def main() -> None:
         f"Prompt: {prompt_version} ({prompt_fingerprint})"
     )
 
-    if ci_status != "pass":
-        sys.exit(1)
+    # Exiting non-zero here would abort the calling workflow step immediately, skipping
+    # any later steps (publishing the PR comment, uploading artifacts) that read this
+    # script's outputs — exactly the steps needed to see *why* it failed. CI gating on
+    # ci_status is the caller's job: tui-review.yml has a dedicated step for it that
+    # runs after the comment/upload steps; tui-autofix.yml reads the report file directly
+    # and already ignores this script's exit code (`|| true`).
 
 
 if __name__ == "__main__":

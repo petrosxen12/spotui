@@ -45,3 +45,34 @@ tasks:
     desc: Run TUI review eval against committed fixture bundle-001 (requires OPENAI_API_KEY)
     cmds:
       - python review/tui_review.py --bundle review/evals/fixtures/bundle-001 --prompt-set review/prompts/tui-review-prompt-set.json --out review/evals/results/bundle-001 --write-summary
+
+  demo:image:
+    desc: Build the containerized demo-recording toolchain (Go, tmux, asciinema, agg)
+    cmds:
+      - docker build -t spotui-demo-record -f docs/screenshots/docker/Dockerfile docs/screenshots/docker
+
+  demo:record:
+    desc: Record docs/screenshots/spotui-demo.cast + .gif inside Docker (requires ~/.config/spotui with a valid login)
+    deps: [demo:image]
+    cmds:
+      - docker run --rm --user "{{.UID}}:{{.GID}}" -e HOME=/tmp/home -e GOCACHE=/tmp/go-cache -e GOPATH=/tmp/go -e XDG_CONFIG_HOME=/tmp/xdg-config -v "{{.PWD}}:/workspace" -v "$HOME/.config/spotui:/tmp/spotui-config-ro:ro" -e SPOTUI_CLIENT_ID -e SPOTUI_REDIRECT_URI spotui-demo-record /workspace/docs/screenshots/docker/record-demo.sh
+    vars:
+      PWD:
+        sh: pwd
+      UID:
+        sh: id -u
+      GID:
+        sh: id -g
+
+  demo:resize-record:
+    desc: Record docs/screenshots/spotui-resize-demo.cast + .gif showing adaptive split-pane resizing (requires ~/.config/spotui with a valid login)
+    deps: [demo:image]
+    cmds:
+      - docker run --rm --user "{{.UID}}:{{.GID}}" -e HOME=/tmp/home -e GOCACHE=/tmp/go-cache -e GOPATH=/tmp/go -e XDG_CONFIG_HOME=/tmp/xdg-config -v "{{.PWD}}:/workspace" -v "$HOME/.config/spotui:/tmp/spotui-config-ro:ro" -e SPOTUI_CLIENT_ID -e SPOTUI_REDIRECT_URI spotui-demo-record /workspace/docs/screenshots/docker/record-demo-resize-showcase.sh
+    vars:
+      PWD:
+        sh: pwd
+      UID:
+        sh: id -u
+      GID:
+        sh: id -g

@@ -10,6 +10,12 @@ Terminal Spotify controller with a CLI and Bubble Tea TUI, plus optional lightwe
 
 Raw terminal recording: [spotui-demo.cast](./docs/screenshots/spotui-demo.cast)
 
+Adaptive layout, live in a resized split pane alongside another program:
+
+![spotui adaptive resizing demo](./docs/screenshots/spotui-resize-demo.gif)
+
+Raw terminal recording: [spotui-resize-demo.cast](./docs/screenshots/spotui-resize-demo.cast)
+
 ## QA Review Bundle
 
 Generate a deterministic multi-layout TUI review bundle, separate from the main `spotui` binary:
@@ -49,6 +55,7 @@ Repository setup for this workflow:
 - Optional managed local playback with `spotifyd`
 - Fuzzy matching for `/device` and `/play`
 - Inline autocomplete and ghost completion
+- Adaptive layout that reflows cleanly from a wide terminal down to a narrow split pane
 - Polling backoff for no-device, network, and rate-limit states
 - Clear error messages for auth expiry, Premium requirements, and connectivity issues
 
@@ -208,6 +215,30 @@ export SPOTUI_CLIENT_ID=your_spotify_client_id
 export SPOTUI_REDIRECT_URI=http://127.0.0.1:8888/callback
 ```
 
+### `config.json` Reference
+
+Top-level fields:
+
+- `client_id`: Spotify app client ID; overridden by `SPOTUI_CLIENT_ID` when set
+- `redirect_uri`: OAuth redirect URI; overridden by `SPOTUI_REDIRECT_URI` when set
+- `preferred_device_id`: Spotify Connect device used for playback; normally set via `spotui use <name>` or `/device`, not hand-edited
+- `local_player`: see below
+
+`local_player` fields:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `enabled` | `false` | User-set intent flag surfaced in `spotui local status` output; does not itself start or stop `spotifyd` (use `spotui local start`/`stop` for that) |
+| `device_name` | `"spotui"` | Name the managed `spotifyd` instance advertises as a Spotify Connect device |
+| `backend` | `"portaudio"` | Audio backend passed to `spotifyd` (e.g. `pulseaudio`, `alsa`) |
+| `audio_device` | `""` | Output device passed to `spotifyd`; empty uses `spotifyd`'s own default |
+| `bitrate` | `320` | Streaming bitrate in kbps; valid values are `96`, `160`, `320` — anything else silently resets to `320` |
+| `initial_volume` | `100` | Starting volume, `0`-`100`; out-of-range values silently reset to `100` |
+| `spotifyd_path` | `""` | Path to the `spotifyd` binary; empty looks up `spotifyd` on `PATH` |
+| `use_mpris` | `true` | Enables `spotifyd`'s MPRIS (D-Bus) integration; set to `false` on systems without a D-Bus session bus (see Troubleshooting) |
+
+`last_used_device` and `last_search` are internal caches `spotui` writes to speed up subsequent runs and support index-based `spotui play track 3`; not meant to be hand-edited.
+
 ### Token Storage
 
 - Config dir mode `0700`
@@ -241,6 +272,9 @@ Common causes:
 - unsupported backend in the installed `spotifyd` build
 - invalid `audio_device`
 - local audio stack mismatch
+- no D-Bus session bus available (minimal servers, containers): set
+  `"use_mpris": false` under `local_player` in `config.json` to disable
+  `spotifyd`'s MPRIS integration, which otherwise crashes shortly after connecting
 
 If needed, inspect the full log directly:
 
