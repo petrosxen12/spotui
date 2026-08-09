@@ -5,8 +5,6 @@ Terminal Spotify controller with a CLI and Bubble Tea TUI, plus optional lightwe
 ## Screenshots
 
 ![spotui TUI demo](./docs/screenshots/spotui-demo.gif)
-![spotui search results](./docs/screenshots/tui-overview.svg)
-![spotui devices view](./docs/screenshots/tui-commands.svg)
 
 > GIFs connect to Spotify on load — give them a few seconds to show real activity.
 
