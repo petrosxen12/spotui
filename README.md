@@ -8,157 +8,57 @@ Terminal Spotify controller with a CLI and Bubble Tea TUI, plus optional lightwe
 ![spotui search results](./docs/screenshots/tui-overview.svg)
 ![spotui devices view](./docs/screenshots/tui-commands.svg)
 
-Raw terminal recording: [spotui-demo.cast](./docs/screenshots/spotui-demo.cast)
+> GIFs connect to Spotify on load — give them a few seconds to show real activity.
 
 Adaptive layout, live in a resized split pane alongside another program:
 
 ![spotui adaptive resizing demo](./docs/screenshots/spotui-resize-demo.gif)
 
-Raw terminal recording: [spotui-resize-demo.cast](./docs/screenshots/spotui-resize-demo.cast)
-
-## QA Review Bundle
-
-Generate a deterministic multi-layout TUI review bundle, separate from the main `spotui` binary:
-
-```bash
-task qa:tui-review
-```
-
-This writes review assets to `docs/qa/tui-review/`, including:
-
-- SVG screenshot-style renders for several terminal sizes
-- plain-text captures of each rendered TUI state
-- a `review-brief.md` prompt for AI or human QA review
-- a `manifest.json` index of scenarios and files
-
-Use this as a quality-control pass for visual polish, density, command clarity, and compact-layout behavior.
-
-PRs that change TUI surfaces can also run the GitHub Actions `TUI Review` workflow, which:
-
-- generates the bundle in CI
-- rasterizes the SVG renders to PNG for multimodal review
-- calls OpenAI with the bundle plus an agent-facing review prompt
-- posts a sticky PR comment with a strict JSON handoff for follow-on AI implementor agents
-- fails CI only on blocker-level findings
-
-Repository setup for this workflow:
-
-- configure `OPENAI_API_KEY` in GitHub Actions secrets
-- adjust the default model in `.github/workflows/tui-review.yml` if needed
+Raw terminal recordings: [spotui-demo.cast](./docs/screenshots/spotui-demo.cast), [spotui-resize-demo.cast](./docs/screenshots/spotui-resize-demo.cast)
 
 ## Features
 
 - CLI and TUI in one binary
 - Spotify Authorization Code with PKCE
-- Search tracks and playlists
+- Search tracks and playlists, with fuzzy matching for `/device` and `/play`
 - Device listing and preferred-device selection
 - Optional managed local playback with `spotifyd`
-- Fuzzy matching for `/device` and `/play`
 - Inline autocomplete and ghost completion
-- Adaptive layout that reflows cleanly from a wide terminal down to a narrow split pane
-- Polling backoff for no-device, network, and rate-limit states
-- Clear error messages for auth expiry, Premium requirements, and connectivity issues
+- Adaptive layout that reflows from a wide terminal down to a narrow split pane
+- Clear error handling for auth expiry, Premium requirements, rate limits, and connectivity issues
 
 ## Requirements
 
 - Go 1.24.2+
 - Spotify app client ID
 - Spotify Premium for playback control
-- `spotifyd` on Linux for local playback without the full Spotify desktop app
-
-### Recommended `spotifyd` Install
-
-For Linux desktop setups, prefer the upstream `spotifyd` release binary over the Homebrew build.
-
-Why:
-
-- some Homebrew Linux builds expose a reduced backend set
-- PipeWire/PulseAudio desktop systems work better with a full upstream build
-- `spotui` can point at any `spotifyd` binary via `local_player.spotifyd_path`
-
-Typical Ubuntu/PipeWire setup:
-
-- install the upstream `spotifyd` `linux-x86_64-full` release
-- place it somewhere stable such as `~/.local/bin/spotifyd`
-- set `local_player.spotifyd_path` in `~/.config/spotui/config.json`
+- `spotifyd` on Linux for local playback without the full Spotify desktop app (prefer the upstream release binary over the Homebrew build — it has a fuller backend set for PipeWire/PulseAudio setups)
 
 ## Quick Start
 
-1. Create a Spotify app at <https://developer.spotify.com/dashboard>
-2. Add this redirect URI:
-
-```text
-http://127.0.0.1:8888/callback
-```
-
-3. Export your client ID:
+1. Create a Spotify app at <https://developer.spotify.com/dashboard> and add this redirect URI: `http://127.0.0.1:8888/callback`
+2. Export your client ID and build:
 
 ```bash
 export SPOTUI_CLIENT_ID=your_spotify_client_id
-```
-
-4. Build and log in:
-
-```bash
-go build -o spotui ./cmd/spotui
+go build -o spotui ./cmd/spotui   # or: task build
 ./spotui login --client-id "$SPOTUI_CLIENT_ID"
 ./spotui tui
 ```
 
-## Install
-
-```bash
-go build -o spotui ./cmd/spotui
-```
-
-Or:
-
-```bash
-task build
-```
-
 ## Usage
 
-Use the built-in help for the full command reference:
-
 ```bash
-spotui --help
-spotui [command] --help
-```
-
-Typical flow:
-
-```bash
+spotui --help              # full command reference
 spotui login --client-id "$SPOTUI_CLIENT_ID"
 spotui devices
 spotui search "daft punk"
-spotui play track 3
+spotui play track 3        # or a Spotify ID/URI, from search results
+spotui use kitchen         # set preferred device by substring match
 spotui tui
 ```
 
-Use `spotui use <name>` to set a preferred device by substring match, for example `spotui use kitchen`.
-
-### Playing From Search Results
-
-`spotui play` accepts:
-
-- a Spotify ID
-- a Spotify URI
-- an index from the most recent `spotui search`
-
-```bash
-spotui play track 11dFghVXANMlKmJXsNCbNl
-spotui play track spotify:track:11dFghVXANMlKmJXsNCbNl
-spotui play track 3
-
-spotui play playlist 37i9dQZF1DXcBWIGoYBM5M
-spotui play playlist spotify:playlist:37i9dQZF1DXcBWIGoYBM5M
-spotui play playlist 1
-```
-
 ### Local Playback
-
-`spotui` can manage a local `spotifyd` daemon on Linux and select it as the preferred Spotify Connect device.
 
 ```bash
 spotui local status
@@ -168,7 +68,7 @@ spotui local reset
 spotui local stop
 ```
 
-Recommended local-player config shape:
+Recommended config shape:
 
 ```json
 {
@@ -179,132 +79,55 @@ Recommended local-player config shape:
 }
 ```
 
-On PipeWire desktops, leave `audio_device` empty unless you specifically need to force a sink.
+On PipeWire desktops, leave `audio_device` empty unless you need to force a sink.
 
 ## TUI
 
-Run `spotui tui` for the interactive interface.
+Run `spotui tui` for the interactive interface: type a query and press `Enter` to search, `/help` for the slash-command list, `Tab` for autocomplete, `q`/`Ctrl+C` to quit.
 
-Inside the TUI:
-
-- type a search query and press `Enter`
-- press `/help` for the slash-command list
-- use `Tab` and inline suggestions to complete commands quickly
-- use `q` or `Ctrl+C` to quit
-
-### Autocomplete
-
-- Suggestions appear for `/` commands
-- Best match is shown inline as ghost completion
-- `/local` expands to local-player subcommands such as `start`, `stop`, `use`, `status`, and `reset`
-- `/device` uses known Spotify devices
-- `/play` uses the latest TUI search results
+`/local` expands to local-player subcommands (`start`, `stop`, `use`, `status`, `reset`); `/device` uses known Spotify devices; `/play` uses the latest search results.
 
 ## Config
 
-Stored in `~/.config/spotui/`:
-
-- `config.json`: client ID, redirect URI, preferred device, local-player settings, last-used device, last search cache
-- `token.json`: Spotify access and refresh tokens
-- managed local-player runtime files: generated `spotifyd` config, PID, and log files
-
-Environment variables:
+Stored in `~/.config/spotui/`: `config.json` (client ID, redirect URI, preferred device, local-player settings, caches) and `token.json` (Spotify tokens, mode `0600`, atomic writes).
 
 ```bash
 export SPOTUI_CLIENT_ID=your_spotify_client_id
 export SPOTUI_REDIRECT_URI=http://127.0.0.1:8888/callback
 ```
 
-### `config.json` Reference
-
-Top-level fields:
-
-- `client_id`: Spotify app client ID; overridden by `SPOTUI_CLIENT_ID` when set
-- `redirect_uri`: OAuth redirect URI; overridden by `SPOTUI_REDIRECT_URI` when set
-- `preferred_device_id`: Spotify Connect device used for playback; normally set via `spotui use <name>` or `/device`, not hand-edited
-- `local_player`: see below
-
-`local_player` fields:
+`local_player` fields in `config.json`:
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `enabled` | `false` | User-set intent flag surfaced in `spotui local status` output; does not itself start or stop `spotifyd` (use `spotui local start`/`stop` for that) |
-| `device_name` | `"spotui"` | Name the managed `spotifyd` instance advertises as a Spotify Connect device |
+| `enabled` | `false` | Intent flag surfaced in `spotui local status`; use `spotui local start`/`stop` to actually control `spotifyd` |
+| `device_name` | `"spotui"` | Spotify Connect device name the managed `spotifyd` advertises |
 | `backend` | `"portaudio"` | Audio backend passed to `spotifyd` (e.g. `pulseaudio`, `alsa`) |
-| `audio_device` | `""` | Output device passed to `spotifyd`; empty uses `spotifyd`'s own default |
-| `bitrate` | `320` | Streaming bitrate in kbps; valid values are `96`, `160`, `320` — anything else silently resets to `320` |
-| `initial_volume` | `100` | Starting volume, `0`-`100`; out-of-range values silently reset to `100` |
-| `spotifyd_path` | `""` | Path to the `spotifyd` binary; empty looks up `spotifyd` on `PATH` |
-| `use_mpris` | `true` | Enables `spotifyd`'s MPRIS (D-Bus) integration; set to `false` on systems without a D-Bus session bus (see Troubleshooting) |
-
-`last_used_device` and `last_search` are internal caches `spotui` writes to speed up subsequent runs and support index-based `spotui play track 3`; not meant to be hand-edited.
-
-### Token Storage
-
-- Config dir mode `0700`
-- Token file mode `0600`
-- Atomic temp-file-and-rename writes
+| `audio_device` | `""` | Output device; empty uses `spotifyd`'s default |
+| `bitrate` | `320` | Streaming kbps; valid values `96`/`160`/`320`, else resets to `320` |
+| `initial_volume` | `100` | `0`-`100`; out-of-range resets to `100` |
+| `spotifyd_path` | `""` | Path to the `spotifyd` binary; empty looks up `PATH` |
+| `use_mpris` | `true` | Enables MPRIS (D-Bus) integration; set `false` on systems without a D-Bus session bus |
 
 ## Troubleshooting
 
-### No active device
+**No active device** — start Spotify on a desktop, mobile, or web player, then run `spotui devices` or `/devices`. If `spotifyd` is installed, try `spotui local use`; if local-player state is stuck, run `spotui local reset`.
 
-Start Spotify on a desktop, mobile, or web player, then run `spotui devices` or use `/devices`.
+**`spotifyd` exits during startup** — `spotui` prints the tail of the managed `spotifyd` log. Common causes: unsupported backend, invalid `audio_device`, or no D-Bus session bus (set `"use_mpris": false` in `local_player`). Full log: `~/.config/spotui/runtime/spotifyd/spotifyd.log`.
 
-If `spotifyd` is installed, run:
+**Linux audio backend issues** — on PipeWire, prefer an upstream `spotifyd` full build with `backend = "pulseaudio"`, and avoid forcing `audio_device`. PortAudio-specific device errors are usually a `spotifyd` build issue, not `spotui`.
 
-```bash
-spotui local use
-```
+**Login expired** — `spotui login --client-id "$SPOTUI_CLIENT_ID"`
 
-If local-player runtime state is stuck or pointing at the wrong `spotifyd` process, reset it with:
+**Premium required** — playback control requires Spotify Premium.
 
-```bash
-spotui local reset
-```
+**Rate limited** — `spotui` backs off automatically on `429`.
 
-### `spotifyd` exits during startup
+## QA Review Bundle
 
-`spotui` now surfaces the tail of the managed `spotifyd` log on startup failure.
+`task qa:tui-review` generates a deterministic multi-layout TUI review bundle in `docs/qa/tui-review/` (SVG renders, text captures, a review-brief prompt, and a manifest) for visual-polish QA, separate from the main binary.
 
-Common causes:
-
-- unsupported backend in the installed `spotifyd` build
-- invalid `audio_device`
-- local audio stack mismatch
-- no D-Bus session bus available (minimal servers, containers): set
-  `"use_mpris": false` under `local_player` in `config.json` to disable
-  `spotifyd`'s MPRIS integration, which otherwise crashes shortly after connecting
-
-If needed, inspect the full log directly:
-
-```bash
-tail -n 100 ~/.config/spotui/runtime/spotifyd/spotifyd.log
-```
-
-### Linux audio backend issues
-
-If you are on a PipeWire desktop and local playback is unstable:
-
-- prefer an upstream `spotifyd` full build
-- use `backend = "pulseaudio"` when that build supports it
-- avoid forcing `audio_device` until the default path works
-
-If you see PortAudio-specific device errors, the installed `spotifyd` build is often the problem rather than `spotui`.
-
-### Login expired
-
-```bash
-spotui login --client-id "$SPOTUI_CLIENT_ID"
-```
-
-### Premium required
-
-Playback control requires Spotify Premium.
-
-### Rate limited
-
-`spotui` backs off automatically on `429`.
+PRs touching TUI surfaces also run the `TUI Review` GitHub Actions workflow, which builds the bundle, sends it to OpenAI for review, and posts a sticky PR comment with blocker-level findings. Requires an `OPENAI_API_KEY` secret; adjust the model in `.github/workflows/tui-review.yml` if needed.
 
 ## Development
 
