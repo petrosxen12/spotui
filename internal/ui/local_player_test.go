@@ -49,6 +49,10 @@ func (reflectedLocalPlayerService) GetCurrentTrackDetails(context.Context) (app.
 	return app.TrackDetails{}, nil
 }
 
+func (reflectedLocalPlayerService) ToggleLike(context.Context) (bool, error) {
+	return false, nil
+}
+
 func (reflectedLocalPlayerService) ListDevices(context.Context) ([]app.Device, error) {
 	return nil, nil
 }

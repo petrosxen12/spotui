@@ -20,6 +20,7 @@ type slashCommand struct {
 
 var slashCommands = []slashCommand{
 	{name: "/details", usage: "/details", description: "show details for the current track"},
+	{name: "/like", usage: "/like", description: "toggle Liked Songs for the current track"},
 	{name: "/help", usage: "/help", description: "show command help"},
 	{name: "/local", usage: "/local start", description: "start the lightweight local player"},
 	{name: "/local", usage: "/local stop", description: "stop the lightweight local player"},
@@ -64,6 +65,8 @@ func (m model) runSlashCommand(raw string) tea.Cmd {
 	switch command {
 	case "details":
 		return fetchTrackDetailsCmd(m.service)
+	case "like":
+		return toggleLikeCmd(m.service)
 	case "help":
 		return func() tea.Msg { return helpMsg{} }
 	case "local":
@@ -249,6 +252,19 @@ func fetchTrackDetailsCmd(service app.PlayerService) tea.Cmd {
 	return func() tea.Msg {
 		details, err := service.GetCurrentTrackDetails(context.Background())
 		return trackDetailsMsg{details: details, err: err}
+	}
+}
+
+func toggleLikeCmd(service app.PlayerService) tea.Cmd {
+	return func() tea.Msg {
+		liked, err := service.ToggleLike(context.Background())
+		if err != nil {
+			return actionMsg{err: err}
+		}
+		if liked {
+			return actionMsg{text: "Added to Liked Songs"}
+		}
+		return actionMsg{text: "Removed from Liked Songs"}
 	}
 }
 

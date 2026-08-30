@@ -36,6 +36,7 @@ type PlayerService interface {
 	Prev(ctx context.Context) error
 	GetPlaybackState(ctx context.Context) (PlaybackState, error)
 	GetCurrentTrackDetails(ctx context.Context) (TrackDetails, error)
+	ToggleLike(ctx context.Context) (bool, error)
 	ListDevices(ctx context.Context) ([]Device, error)
 	ListPlaylists(ctx context.Context) ([]Playlist, error)
 	SetDeviceByID(ctx context.Context, id string) error
@@ -271,16 +272,10 @@ func (s *Service) GetCurrentTrackDetails(ctx context.Context) (TrackDetails, err
 	if err != nil {
 		return TrackDetails{}, err
 	}
-	if state.Item.URI == "" || state.Item.Name == "" {
-		return TrackDetails{}, fmt.Errorf("nothing is currently playing")
-	}
-	if state.CurrentlyPlayingType != "" && state.CurrentlyPlayingType != "track" {
-		return TrackDetails{}, fmt.Errorf("current item is %q, not a track", state.CurrentlyPlayingType)
-	}
 
-	trackID, ok := spotifyTrackIDFromURI(state.Item.URI)
-	if !ok {
-		return TrackDetails{}, fmt.Errorf("could not resolve track id from current item")
+	trackID, err := currentTrackID(state)
+	if err != nil {
+		return TrackDetails{}, err
 	}
 
 	details := TrackDetails{
@@ -320,6 +315,47 @@ func (s *Service) GetCurrentTrackDetails(ctx context.Context) (TrackDetails, err
 	details.TimeSignature = features.TimeSignature
 
 	return details, nil
+}
+
+func (s *Service) ToggleLike(ctx context.Context) (bool, error) {
+	state, err := s.client.GetPlaybackState(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	trackID, err := currentTrackID(state)
+	if err != nil {
+		return false, err
+	}
+	saved, err := s.client.IsTrackSaved(ctx, trackID)
+	if err != nil {
+		return false, err
+	}
+	if saved {
+		if err := s.client.RemoveSavedTrack(ctx, trackID); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	if err := s.client.SaveTrack(ctx, trackID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func currentTrackID(state *spotifyapi.PlaybackState) (string, error) {
+	if state.Item.URI == "" || state.Item.Name == "" {
+		return "", fmt.Errorf("nothing is currently playing")
+	}
+	if state.CurrentlyPlayingType != "" && state.CurrentlyPlayingType != "track" {
+		return "", fmt.Errorf("current item is %q, not a track", state.CurrentlyPlayingType)
+	}
+
+	trackID, ok := spotifyTrackIDFromURI(state.Item.URI)
+	if !ok {
+		return "", fmt.Errorf("could not resolve track id from current item")
+	}
+	return trackID, nil
 }
 
 func spotifyTrackIDFromURI(uri string) (string, bool) {

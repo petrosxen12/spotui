@@ -2,6 +2,7 @@ package spotify
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -72,4 +73,36 @@ func (c *Client) Search(ctx context.Context, query string) (*SearchResults, erro
 		})
 	}
 	return results, nil
+}
+
+func (c *Client) SaveTrack(ctx context.Context, trackID string) error {
+	trackID = strings.TrimSpace(trackID)
+	if trackID == "" {
+		return errors.New("track ID is required")
+	}
+	return c.do(ctx, http.MethodPut, "/me/tracks", nil, map[string][]string{"ids": {trackID}}, nil)
+}
+
+func (c *Client) RemoveSavedTrack(ctx context.Context, trackID string) error {
+	trackID = strings.TrimSpace(trackID)
+	if trackID == "" {
+		return errors.New("track ID is required")
+	}
+	return c.do(ctx, http.MethodDelete, "/me/tracks", nil, map[string][]string{"ids": {trackID}}, nil)
+}
+
+func (c *Client) IsTrackSaved(ctx context.Context, trackID string) (bool, error) {
+	trackID = strings.TrimSpace(trackID)
+	if trackID == "" {
+		return false, errors.New("track ID is required")
+	}
+
+	var saved []bool
+	if err := c.do(ctx, http.MethodGet, "/me/tracks/contains", url.Values{"ids": {trackID}}, nil, &saved); err != nil {
+		return false, err
+	}
+	if len(saved) != 1 {
+		return false, errors.New("Spotify returned an invalid saved-track response")
+	}
+	return saved[0], nil
 }

@@ -13,6 +13,7 @@ import (
 type stubPlayerService struct {
 	listDevices       func(context.Context) ([]app.Device, error)
 	trackDetails      func(context.Context) (app.TrackDetails, error)
+	toggleLike        func(context.Context) (bool, error)
 	localPlayerStatus app.LocalPlayerStatus
 	startLocalPlayer  func(context.Context) error
 	resetLocalPlayer  func(context.Context) error
@@ -61,6 +62,13 @@ func (s stubPlayerService) GetCurrentTrackDetails(ctx context.Context) (app.Trac
 		return s.trackDetails(ctx)
 	}
 	return app.TrackDetails{}, nil
+}
+
+func (s stubPlayerService) ToggleLike(ctx context.Context) (bool, error) {
+	if s.toggleLike != nil {
+		return s.toggleLike(ctx)
+	}
+	return false, nil
 }
 
 func (s stubPlayerService) ListDevices(ctx context.Context) ([]app.Device, error) {
@@ -265,6 +273,18 @@ func TestBuildSuggestionsIncludesDetailsCommand(t *testing.T) {
 	}
 }
 
+func TestBuildSuggestionsIncludesLikeCommand(t *testing.T) {
+	m := newModel(stubPlayerService{})
+
+	suggestions := m.buildSuggestions("/lik")
+	if len(suggestions) != 1 {
+		t.Fatalf("expected 1 like suggestion, got %d", len(suggestions))
+	}
+	if suggestions[0].insertValue != "/like" {
+		t.Fatalf("unexpected like suggestion %q", suggestions[0].insertValue)
+	}
+}
+
 func TestBuildSuggestionsIncludesLocalSubcommandsAfterSpace(t *testing.T) {
 	m := newModel(stubPlayerService{})
 
@@ -350,6 +370,47 @@ func TestDetailsCommandCallsService(t *testing.T) {
 	}
 	if called != 1 {
 		t.Fatalf("expected GetCurrentTrackDetails to be called once, got %d", called)
+	}
+}
+
+func TestLikeCommandReportsExactActionText(t *testing.T) {
+	tests := []struct {
+		name     string
+		liked    bool
+		wantText string
+	}{
+		{name: "added", liked: true, wantText: "Added to Liked Songs"},
+		{name: "removed", liked: false, wantText: "Removed from Liked Songs"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			called := 0
+			m := newModel(stubPlayerService{
+				toggleLike: func(context.Context) (bool, error) {
+					called++
+					return tt.liked, nil
+				},
+			})
+
+			cmd := m.runSlashCommand("/like")
+			if cmd == nil {
+				t.Fatal("expected like command")
+			}
+			action, ok := cmd().(actionMsg)
+			if !ok {
+				t.Fatal("expected actionMsg")
+			}
+			if action.err != nil {
+				t.Fatalf("unexpected error: %v", action.err)
+			}
+			if action.text != tt.wantText {
+				t.Fatalf("action text = %q, want %q", action.text, tt.wantText)
+			}
+			if called != 1 {
+				t.Fatalf("ToggleLike calls = %d, want 1", called)
+			}
+		})
 	}
 }
 
