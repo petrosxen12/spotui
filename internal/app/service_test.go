@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -393,6 +394,109 @@ func TestGetCurrentTrackDetailsFallsBackWhenAudioFeaturesForbidden(t *testing.T)
 	}
 	if details.AudioFeaturesNote == "" {
 		t.Fatal("expected AudioFeaturesNote to be set")
+	}
+}
+
+func TestToggleLikeUpdatesCurrentTrackSavedState(t *testing.T) {
+	tests := []struct {
+		name           string
+		initiallySaved bool
+		wantLiked      bool
+		wantMethod     string
+	}{
+		{name: "save unsaved track", initiallySaved: false, wantLiked: true, wantMethod: http.MethodPut},
+		{name: "remove saved track", initiallySaved: true, wantLiked: false, wantMethod: http.MethodDelete},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testConfig(t)
+			mutationCalls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/me/player":
+					writeJSON(t, w, map[string]any{
+						"currently_playing_type": "track",
+						"item": map[string]any{
+							"name": "Track One",
+							"uri":  "spotify:track:track-1",
+						},
+					})
+				case "/v1/me/tracks/contains":
+					if got := r.URL.Query().Get("ids"); got != "track-1" {
+						t.Fatalf("contains ids = %q, want track-1", got)
+					}
+					writeJSON(t, w, []bool{tt.initiallySaved})
+				case "/v1/me/tracks":
+					mutationCalls++
+					if r.Method != tt.wantMethod {
+						t.Fatalf("mutation method = %q, want %q", r.Method, tt.wantMethod)
+					}
+					var body struct {
+						IDs []string `json:"ids"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Fatalf("decode mutation body: %v", err)
+					}
+					if len(body.IDs) != 1 || body.IDs[0] != "track-1" {
+						t.Fatalf("mutation ids = %#v, want [track-1]", body.IDs)
+					}
+					w.WriteHeader(http.StatusOK)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			service := &Service{
+				cfg:    cfg,
+				client: spotifyapi.NewClient(cfg, staticTokenSource{}),
+				local:  stubLocalPlayerManager{},
+			}
+			restoreTransport := rewriteSpotifyAPI(t, server.URL)
+			defer restoreTransport()
+
+			liked, err := service.ToggleLike(context.Background())
+			if err != nil {
+				t.Fatalf("ToggleLike() error = %v", err)
+			}
+			if liked != tt.wantLiked {
+				t.Fatalf("ToggleLike() liked = %v, want %v", liked, tt.wantLiked)
+			}
+			if mutationCalls != 1 {
+				t.Fatalf("mutation calls = %d, want 1", mutationCalls)
+			}
+		})
+	}
+}
+
+func TestToggleLikeRejectsNonTrackCurrentItem(t *testing.T) {
+	cfg := testConfig(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/me/player" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+		writeJSON(t, w, map[string]any{
+			"currently_playing_type": "episode",
+			"item": map[string]any{
+				"name": "Episode One",
+				"uri":  "spotify:episode:episode-1",
+			},
+		})
+	}))
+	defer server.Close()
+
+	service := &Service{
+		cfg:    cfg,
+		client: spotifyapi.NewClient(cfg, staticTokenSource{}),
+		local:  stubLocalPlayerManager{},
+	}
+	restoreTransport := rewriteSpotifyAPI(t, server.URL)
+	defer restoreTransport()
+
+	_, err := service.ToggleLike(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "not a track") {
+		t.Fatalf("ToggleLike() error = %v, want non-track error", err)
 	}
 }
 

@@ -30,6 +30,8 @@ var scopes = []string{
 	"user-read-playback-state",
 	"user-modify-playback-state",
 	"user-read-currently-playing",
+	"user-library-read",
+	"user-library-modify",
 }
 
 type Manager struct {

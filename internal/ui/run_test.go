@@ -54,6 +54,10 @@ func (s *shutdownOnlyService) GetCurrentTrackDetails(context.Context) (app.Track
 	return app.TrackDetails{}, nil
 }
 
+func (s *shutdownOnlyService) ToggleLike(context.Context) (bool, error) {
+	return false, nil
+}
+
 func (s *shutdownOnlyService) ListDevices(context.Context) ([]app.Device, error) {
 	return nil, nil
 }

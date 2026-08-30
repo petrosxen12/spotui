@@ -1,10 +1,30 @@
 package auth
 
 import (
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/petrosxen/spotui/internal/spoterr"
 )
+
+func TestBuildAuthURLIncludesLibraryScopes(t *testing.T) {
+	rawURL := buildAuthURL("client", "http://127.0.0.1/callback", "challenge", "state")
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("parse auth URL: %v", err)
+	}
+
+	gotScopes := make(map[string]bool)
+	for _, scope := range strings.Fields(parsed.Query().Get("scope")) {
+		gotScopes[scope] = true
+	}
+	for _, want := range []string{"user-library-read", "user-library-modify"} {
+		if !gotScopes[want] {
+			t.Fatalf("scope %q missing from %q", want, parsed.Query().Get("scope"))
+		}
+	}
+}
 
 func TestClassifyTokenErrorUsesErrorDescriptionAsAuthExpired(t *testing.T) {
 	err := classifyTokenError([]byte(`{"error":"invalid_grant","error_description":"Failed to remove token"}`))
