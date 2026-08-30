@@ -97,7 +97,7 @@ func (m model) layoutMetricsForWidth(bodyWidth int, paddingX int, paddingY int, 
 		// flagged the wider rail as visually noisy, drawing attention away from the
 		// results column, which should dominate.
 		candidateRailWidth := clampInt(bodyWidth/6, 20, 24)
-		candidateMainWidth := bodyWidth - candidateRailWidth - 4
+		candidateMainWidth := bodyWidth - candidateRailWidth - 6
 		if candidateMainWidth >= 72 {
 			mainWidth = candidateMainWidth
 			railEnabled = true

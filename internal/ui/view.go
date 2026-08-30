@@ -93,13 +93,17 @@ var (
 
 	contextRailStyle = lipgloss.NewStyle().
 				BorderLeft(true).
-				BorderStyle(lipgloss.NormalBorder()).
-		// Muted further than the results panel's own borders — QA review flagged
-		// the rail's vertical rule as visually competing with the results column,
-		// which should read as the primary element. Kept close in tone to the page
-		// background rather than the border's original mid-gray, so it recedes.
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#909691", Dark: "#454B47"}).
-		PaddingLeft(2)
+				BorderStyle(lipgloss.ThickBorder()).
+		// A heavier rule plus a deeper gutter (see View) mark the sidebar as its own
+		// surface, distinct from the results column — QA review found the earlier
+		// hairline divider let the rail blend into the main content, weakening the
+		// hierarchy and the scanability of the context it carries.
+		BorderForeground(lipgloss.AdaptiveColor{Light: "#7A807B", Dark: "#5C625D"}).
+		PaddingLeft(3)
+
+	railHeadingStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#5A625D", Dark: "#A6B0AB"}).
+				Bold(true)
 )
 
 func (m model) View() string {
@@ -121,7 +125,7 @@ func (m model) View() string {
 		mainContent = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			mainContent,
-			"    ",
+			"      ",
 			rail,
 		)
 	}
@@ -379,28 +383,34 @@ func (m model) footerPanel(width int, layout layoutMetrics) string {
 	if line := m.localPlayer.statusLine(); line != "" && m.playback.Device.ID == "" {
 		statusParts = append(statusParts, line)
 	}
-	lines := make([]string, 0, 3)
+	groups := make([]string, 0, 3)
 	if len(statusParts) > 0 {
-		lines = append(lines, commandHintStyle.Render(joinAndTruncate(width, "  ·  ", statusParts...)))
+		groups = append(groups, commandHintStyle.Render(joinAndTruncate(width, "  ·  ", statusParts...)))
 	}
 	if m.bannerText != "" {
 		tone := commandHintStyle
 		if m.bannerIsError {
 			tone = bannerStyle
 		}
-		lines = append(lines, tone.Render(truncateText(m.bannerText, width)))
+		groups = append(groups, tone.Render(truncateText(m.bannerText, width)))
 	}
 	if layout.footerShowStatus && currentAction != "" {
-		lines = append(lines, statusTone.Render(truncateText(currentAction, width)))
+		groups = append(groups, statusTone.Render(truncateText(currentAction, width)))
 	}
+	body := strings.Join(groups, "\n\n")
 	if layout.footerShowHints && m.bannerText == "" {
-		lines = append(lines, commandHintStyle.Render(truncateText("/ commands  ·  q quit", width)))
+		hints := commandHintStyle.Render(truncateText("/ commands  ·  q quit", width))
+		if body != "" {
+			body += "\n" + hints
+		} else {
+			body = hints
+		}
 	}
-	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().Width(width).Render(body)
 }
 
 func (m model) contextRailView(layout layoutMetrics) string {
-	lines := []string{eyebrowStyle.Render("Context")}
+	lines := []string{railHeadingStyle.Render("Context")}
 
 	switch m.listMode {
 	case listModeDevices:
@@ -421,7 +431,7 @@ func (m model) contextRailView(layout layoutMetrics) string {
 	// grouping clearer separation without changing what's shown or its order.
 	if selected := m.selectedContextLines(layout.railWidth); len(selected) > 0 {
 		lines = append(lines, "", "")
-		lines = append(lines, subtitleStyle.Render("Selection"))
+		lines = append(lines, railHeadingStyle.Render("Selection"))
 		lines = append(lines, selected...)
 	}
 
@@ -429,24 +439,24 @@ func (m model) contextRailView(layout layoutMetrics) string {
 		index := clampInt(m.list.Index()+1, 1, total)
 		remaining := maxInt(0, total-index)
 		lines = append(lines, "", "")
-		lines = append(lines, subtitleStyle.Render("List"))
+		lines = append(lines, railHeadingStyle.Render("List"))
 		lines = append(lines, infoStyle.Render(fmt.Sprintf("%d of %d", index, total)))
 		lines = append(lines, infoStyle.Render(fmt.Sprintf("%d left", remaining)))
 	}
 
 	if m.playback.Device.Name != "" {
 		lines = append(lines, "", "")
-		lines = append(lines, subtitleStyle.Render("Output"))
+		lines = append(lines, railHeadingStyle.Render("Output"))
 		lines = append(lines, infoStyle.Render(truncateText(m.playback.Device.Name, layout.railWidth)))
 	} else if line := m.localPlayer.statusLine(); line != "" {
 		lines = append(lines, "", "")
-		lines = append(lines, subtitleStyle.Render("Local player"))
+		lines = append(lines, railHeadingStyle.Render("Local player"))
 		lines = append(lines, infoStyle.Render(truncateText(line, layout.railWidth)))
 	}
 
 	if m.playback.NextItemName != "" {
 		lines = append(lines, "", "")
-		lines = append(lines, subtitleStyle.Render("Next"))
+		lines = append(lines, railHeadingStyle.Render("Next"))
 		lines = append(lines, titleStyle.Render(truncateText(m.playback.NextItemName, layout.railWidth)))
 		if m.playback.NextArtistName != "" {
 			lines = append(lines, infoStyle.Render(truncateText(m.playback.NextArtistName, layout.railWidth)))
@@ -455,7 +465,7 @@ func (m model) contextRailView(layout layoutMetrics) string {
 
 	if depth := len(m.viewHistory); depth > 0 {
 		lines = append(lines, "", "")
-		lines = append(lines, subtitleStyle.Render("Back"))
+		lines = append(lines, railHeadingStyle.Render("Back"))
 		lines = append(lines, infoStyle.Render(fmt.Sprintf("esc × %d", depth)))
 	}
 
@@ -562,22 +572,31 @@ func (m model) suggestionsView(layout layoutMetrics) string {
 	if len(visible) > 5 {
 		visible = visible[:5]
 	}
-	contentWidth := maxInt(1, layout.bodyWidth-6)
+	boxWidth := maxInt(18, layout.bodyWidth-6)
+	firstWidth := maxInt(1, boxWidth-2)
 	lines := make([]string, 0, len(visible))
 	for i, suggestion := range visible {
-		line := suggestion.value
-		if suggestion.description != "" {
-			line = joinAndTruncate(contentWidth, "  ", suggestion.value, suggestion.description)
-		} else {
-			line = truncateText(line, contentWidth)
-		}
+		marker := "  "
+		style := commandHintStyle
 		if i == m.suggestionIndex {
-			lines = append(lines, suggestionSelectedStyle.Render("› "+line))
-		} else {
-			lines = append(lines, commandHintStyle.Render("  "+line))
+			marker = lipgloss.NewStyle().Foreground(lipgloss.Color(m.vividAccentColor())).Bold(true).Render("▌") + " "
+			style = suggestionSelectedStyle
 		}
+		lines = append(lines, renderSuggestionLine(suggestion, marker, style, firstWidth))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// renderSuggestionLine renders one suggestion as a single line: the command and
+// its description share the line, and the combined text is ellipsized to the
+// available width so no suggestion ever wraps onto a second row, even in the
+// narrowest supported terminals.
+func renderSuggestionLine(s suggestion, marker string, style lipgloss.Style, firstWidth int) string {
+	content := s.value
+	if s.description != "" {
+		content = s.value + "  " + s.description
+	}
+	return marker + style.Render(truncateText(content, firstWidth))
 }
 
 func (m model) selectedContextLines(width int) []string {

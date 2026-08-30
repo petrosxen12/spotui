@@ -78,7 +78,13 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 
 	line1 := d.renderPrimaryLine(titleText, metaText, selected, item)
 	descWidth := maxInt(1, d.contentWidth()-2)
-	line2 := "  " + d.descriptionStyle(selected).Render(truncateText(descText, descWidth))
+	line2Prefix := "  "
+	if selected && d.focused {
+		line2Prefix = lipgloss.NewStyle().Foreground(lipgloss.Color(d.accentColor)).Bold(true).Render("▌") + " "
+	} else if device, ok := item.(deviceItem); ok && device.active {
+		line2Prefix = lipgloss.NewStyle().Foreground(lipgloss.Color(d.activeDeviceColor)).Bold(true).Render("▎") + " "
+	}
+	line2 := line2Prefix + d.descriptionStyle(selected).Render(truncateText(descText, descWidth))
 
 	if selected {
 		block := strings.Join([]string{line1, line2}, "\n")
@@ -99,7 +105,7 @@ func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, sel
 		titleStyleToUse = rowTitleStyle.Copy().Bold(true)
 		metaStyleToUse = rowDescStyle.Copy().Bold(true)
 		if d.focused {
-			prefix = "› "
+			prefix = "▌ "
 			prefixStyle = prefixStyle.Foreground(lipgloss.Color(d.accentColor)).Bold(true)
 			titleStyleToUse = selectedTitleStyle
 			metaStyleToUse = selectedDescStyle.Copy().Bold(true)
@@ -108,7 +114,13 @@ func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, sel
 	if result, ok := item.(resultItem); ok {
 		metaStyleToUse = d.badgeStyle(result.kind, metaStyleToUse)
 	} else if device, ok := item.(deviceItem); ok && device.active {
-		metaStyleToUse = metaStyleToUse.Copy().Foreground(lipgloss.Color(d.activeDeviceColor))
+		metaStyleToUse = metaStyleToUse.Copy().Foreground(lipgloss.Color(d.activeDeviceColor)).Bold(true)
+		titleStyleToUse = titleStyleToUse.Copy().Bold(true)
+		if !selected {
+			prefix = "▎ "
+			prefixStyle = prefixStyle.Foreground(lipgloss.Color(d.activeDeviceColor)).Bold(true)
+			titleStyleToUse = titleStyleToUse.Foreground(lipgloss.Color(d.activeDeviceColor))
+		}
 	}
 
 	if !d.wideLayout || d.contentWidth() < 36 {
