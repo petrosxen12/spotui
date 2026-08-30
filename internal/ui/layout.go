@@ -63,6 +63,7 @@ func (m *model) setResultDelegate(layout layoutMetrics) {
 		accentColor:        m.vividAccentColor(),
 		trackBadgeColor:    m.trackBadgeColor(),
 		playlistBadgeColor: m.playlistBadgeColor(),
+		activeDeviceColor:  m.activeDeviceColor(),
 	})
 }
 

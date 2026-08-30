@@ -19,6 +19,7 @@ type resultDelegate struct {
 	accentColor        string
 	trackBadgeColor    string
 	playlistBadgeColor string
+	activeDeviceColor  string
 }
 
 func (d resultDelegate) Height() int  { return 2 }
@@ -61,6 +62,9 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		titleText = entry.title
 		descText = entry.description
 		metaText = "DEVICE"
+		if entry.active {
+			metaText = "● DEVICE"
+		}
 	case infoItem:
 		titleText = entry.title
 		descText = entry.description
@@ -103,6 +107,8 @@ func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, sel
 	}
 	if result, ok := item.(resultItem); ok {
 		metaStyleToUse = d.badgeStyle(result.kind, metaStyleToUse)
+	} else if device, ok := item.(deviceItem); ok && device.active {
+		metaStyleToUse = metaStyleToUse.Copy().Foreground(lipgloss.Color(d.activeDeviceColor))
 	}
 
 	if !d.wideLayout || d.contentWidth() < 36 {
@@ -189,6 +195,7 @@ type deviceItem struct {
 	title       string
 	description string
 	id          string
+	active      bool
 }
 
 func (i deviceItem) Title() string       { return i.title }
@@ -308,6 +315,7 @@ func itemsFromDevices(devices []app.Device) []list.Item {
 			title:       device.Name,
 			description: state,
 			id:          device.ID,
+			active:      device.IsActive,
 		})
 	}
 	return items

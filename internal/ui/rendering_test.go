@@ -185,6 +185,41 @@ func TestResultDelegateTruncatesLongRows(t *testing.T) {
 	}
 }
 
+func TestItemsFromDevicesPreservesActiveState(t *testing.T) {
+	items := itemsFromDevices([]app.Device{
+		{Name: "Living Room", Type: "Speaker", IsActive: true},
+		{Name: "Laptop", Type: "Computer"},
+	})
+
+	active, ok := items[0].(deviceItem)
+	if !ok {
+		t.Fatalf("items[0] type = %T, want deviceItem", items[0])
+	}
+	if !active.active {
+		t.Fatal("active device lost its active state")
+	}
+
+	inactive, ok := items[1].(deviceItem)
+	if !ok {
+		t.Fatalf("items[1] type = %T, want deviceItem", items[1])
+	}
+	if inactive.active {
+		t.Fatal("inactive device unexpectedly marked active")
+	}
+}
+
+func TestResultDelegateMarksActiveDeviceWithPersistentBadge(t *testing.T) {
+	items := itemsFromDevices([]app.Device{{Name: "Living Room", Type: "Speaker", IsActive: true}})
+	delegate := resultDelegate{width: 40, activeDeviceColor: "#789a88"}
+	model := list.New(items, delegate, 40, 3)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, model, 0, items[0])
+	if !strings.Contains(buf.String(), "● DEVICE") {
+		t.Fatalf("active device row missing persistent marker: %q", buf.String())
+	}
+}
+
 func TestItemsFromResultsDropsEntriesWithoutVisibleTitles(t *testing.T) {
 	items := itemsFromResults(app.Results{
 		Tracks: []app.SearchItem{

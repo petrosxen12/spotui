@@ -128,6 +128,10 @@ func (m model) playlistBadgeColor() string {
 	return m.harmonicAccentColor(32)
 }
 
+func (m model) activeDeviceColor() string {
+	return m.harmonicAccentColor(0)
+}
+
 // harmonicAccentColor keeps secondary UI colors related to the album-art
 // accent while reducing their chroma so badges remain supporting elements.
 func (m model) harmonicAccentColor(hueShift float64) string {
