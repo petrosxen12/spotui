@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/petrosxen/spotui/internal/app"
+import (
+	"time"
+
+	"github.com/petrosxen/spotui/internal/app"
+)
 
 type connectionMsg struct {
 	user app.User
@@ -54,6 +58,7 @@ type localPlayerStatusMsg struct {
 type localPlayerActionMsg struct {
 	text   string
 	status localPlayerStatus
+	action localPlayerAction
 	err    error
 }
 
@@ -63,7 +68,9 @@ type accentColorMsg struct {
 	err         error
 }
 
-type pollTickMsg struct{}
+type pollTickMsg struct {
+	at time.Time
+}
 
 type localPlayerPollTickMsg struct{}
 

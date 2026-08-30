@@ -22,38 +22,41 @@ const (
 )
 
 type model struct {
-	service            app.PlayerService
-	list               list.Model
-	input              textinput.Model
-	width              int
-	height             int
-	inputFocused       bool
-	connectionStatus   string
-	bannerText         string
-	bannerIsError      bool
-	lastAction         string
-	lastActionErr      bool
-	query              string
-	lastResults        app.Results
-	listMode           listMode
-	playback           app.PlaybackState
-	pollEvery          time.Duration
-	resultCount        int
-	suggestions        []suggestion
-	suggestionIndex    int
-	suggestionsOpen    bool
-	accentColor        string
-	accentColorCache   map[string]string
-	accentColorPending string
-	deviceCache        []app.Device
-	deviceCacheReady   bool
-	deviceCacheBusy    bool
-	localPlayer        localPlayerStatus
-	viewHistory        []viewState
-	pollFailures       int
-	lastActionUntil    time.Time
-	bootFrames         int
-	bootAnimationDone  bool
+	service                  app.PlayerService
+	list                     list.Model
+	input                    textinput.Model
+	width                    int
+	height                   int
+	inputFocused             bool
+	connectionStatus         string
+	bannerText               string
+	bannerIsError            bool
+	lastAction               string
+	lastActionErr            bool
+	query                    string
+	lastResults              app.Results
+	listMode                 listMode
+	playback                 app.PlaybackState
+	pollEvery                time.Duration
+	resultCount              int
+	suggestions              []suggestion
+	suggestionIndex          int
+	suggestionsOpen          bool
+	accentColor              string
+	accentColorCache         map[string]string
+	accentColorPending       string
+	deviceCache              []app.Device
+	deviceCacheReady         bool
+	deviceCacheBusy          bool
+	localPlayer              localPlayerStatus
+	viewHistory              []viewState
+	pollFailures             int
+	lastPlaybackPollAt       time.Time
+	localPlayerStoppedByUser bool
+	localPlayerRecovering    bool
+	lastActionUntil          time.Time
+	bootFrames               int
+	bootAnimationDone        bool
 }
 
 type viewState struct {
@@ -286,10 +289,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.localPlayer = msg.status
 		return m, pollLocalPlayerCmd(localPlayerPollInterval)
 	case localPlayerActionMsg:
+		if msg.action == localPlayerActionRecover {
+			m.localPlayerRecovering = false
+		}
 		if msg.err != nil {
 			m.setLastAction(msg.err.Error(), true)
 			m.showBannerForError(msg.err)
+			if msg.action == localPlayerActionRecover {
+				return m, tea.Batch(fetchPlaybackCmd(m.service), fetchLocalPlayerStatusCmd(m.service))
+			}
 			return m, fetchLocalPlayerStatusCmd(m.service)
+		}
+		switch msg.action {
+		case localPlayerActionStop, localPlayerActionReset:
+			m.localPlayerStoppedByUser = true
+		case localPlayerActionStart, localPlayerActionUse, localPlayerActionRecover:
+			m.localPlayerStoppedByUser = false
 		}
 		if msg.status.supported {
 			m.localPlayer = msg.status
@@ -324,6 +339,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearBanner()
 		return m, tea.Batch(fetchPlaybackCmd(m.service), actionCmd)
 	case pollTickMsg:
+		polledAt := msg.at
+		if polledAt.IsZero() {
+			polledAt = time.Now()
+		}
+		// Strip Go's monotonic reading: on Linux it may pause during suspend, while
+		// the wall clock captures the full sleep/wake gap we need to detect.
+		polledAt = polledAt.Round(0)
+		gap := polledAt.Sub(m.lastPlaybackPollAt)
+		m.lastPlaybackPollAt = polledAt
+		if m.shouldRecoverLocalPlayer(gap) {
+			m.localPlayerRecovering = true
+			return m, recoverLocalPlayerCmd(m.service)
+		}
 		return m, fetchPlaybackCmd(m.service)
 	case localPlayerPollTickMsg:
 		return m, fetchLocalPlayerStatusCmd(m.service)
@@ -336,6 +364,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list, cmd = m.list.Update(msg)
 	}
 	return m, cmd
+}
+
+func (m model) shouldRecoverLocalPlayer(pollGap time.Duration) bool {
+	if m.pollEvery <= 0 || pollGap <= 3*m.pollEvery || m.localPlayerStoppedByUser || m.localPlayerRecovering {
+		return false
+	}
+	if strings.EqualFold(m.localPlayer.process, "running") {
+		return true
+	}
+	return m.localPlayer.device != "" && strings.EqualFold(m.playback.Device.Name, m.localPlayer.device)
 }
 
 func (m *model) showBannerForError(err error) {

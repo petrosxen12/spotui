@@ -269,8 +269,8 @@ func toggleLikeCmd(service app.PlayerService) tea.Cmd {
 }
 
 func pollPlaybackCmd(interval time.Duration) tea.Cmd {
-	return tea.Tick(interval, func(time.Time) tea.Msg {
-		return pollTickMsg{}
+	return tea.Tick(interval, func(tickedAt time.Time) tea.Msg {
+		return pollTickMsg{at: tickedAt.Round(0)}
 	})
 }
 

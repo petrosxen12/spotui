@@ -57,13 +57,14 @@ func newModel(service app.PlayerService) model {
 	input.CharLimit = 256
 
 	return model{
-		service:          service,
-		list:             results,
-		input:            input,
-		inputFocused:     true,
-		connectionStatus: "Connecting to Spotify...",
-		listMode:         listModeSearch,
-		pollEvery:        playbackPollIdle,
-		accentColorCache: make(map[string]string),
+		service:            service,
+		list:               results,
+		input:              input,
+		inputFocused:       true,
+		connectionStatus:   "Connecting to Spotify...",
+		listMode:           listModeSearch,
+		pollEvery:          playbackPollIdle,
+		lastPlaybackPollAt: time.Now().Round(0),
+		accentColorCache:   make(map[string]string),
 	}
 }

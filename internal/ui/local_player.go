@@ -18,6 +18,17 @@ type localPlayerStatus struct {
 	message         string
 }
 
+type localPlayerAction string
+
+const (
+	localPlayerActionStart   localPlayerAction = "start"
+	localPlayerActionStop    localPlayerAction = "stop"
+	localPlayerActionUse     localPlayerAction = "use"
+	localPlayerActionStatus  localPlayerAction = "status"
+	localPlayerActionReset   localPlayerAction = "reset"
+	localPlayerActionRecover localPlayerAction = "recover"
+)
+
 func (s localPlayerStatus) visible() bool {
 	return s.supported && (s.process != "" || s.device != "" || s.message != "" || !s.binaryAvailable)
 }
@@ -76,11 +87,12 @@ func localPlayerStatusActionCmd(service app.PlayerService) tea.Cmd {
 	return func() tea.Msg {
 		status, err := getLocalPlayerStatus(service)
 		if err != nil {
-			return localPlayerActionMsg{text: "Failed to fetch local player status", err: err}
+			return localPlayerActionMsg{text: "Failed to fetch local player status", action: localPlayerActionStatus, err: err}
 		}
 		return localPlayerActionMsg{
 			text:   formatLocalPlayerAction("Fetched local player status", status),
 			status: status,
+			action: localPlayerActionStatus,
 		}
 	}
 }
@@ -89,13 +101,13 @@ func startLocalPlayerCmd(service app.PlayerService) tea.Cmd {
 	return func() tea.Msg {
 		err := callServiceContextMethod(service, "StartLocalPlayer")
 		if err != nil {
-			return localPlayerActionMsg{text: "Failed to start local player", err: err}
+			return localPlayerActionMsg{text: "Failed to start local player", action: localPlayerActionStart, err: err}
 		}
 		status, statusErr := getLocalPlayerStatus(service)
 		if statusErr != nil {
-			return localPlayerActionMsg{text: "Started local player", err: nil}
+			return localPlayerActionMsg{text: "Started local player", action: localPlayerActionStart, err: nil}
 		}
-		return localPlayerActionMsg{text: formatLocalPlayerAction("Started local player", status), status: status, err: nil}
+		return localPlayerActionMsg{text: formatLocalPlayerAction("Started local player", status), status: status, action: localPlayerActionStart, err: nil}
 	}
 }
 
@@ -103,13 +115,13 @@ func stopLocalPlayerCmd(service app.PlayerService) tea.Cmd {
 	return func() tea.Msg {
 		err := callServiceContextMethod(service, "StopLocalPlayer")
 		if err != nil {
-			return localPlayerActionMsg{text: "Failed to stop local player", err: err}
+			return localPlayerActionMsg{text: "Failed to stop local player", action: localPlayerActionStop, err: err}
 		}
 		status, statusErr := getLocalPlayerStatus(service)
 		if statusErr != nil {
-			return localPlayerActionMsg{text: "Stopped local player", err: nil}
+			return localPlayerActionMsg{text: "Stopped local player", action: localPlayerActionStop, err: nil}
 		}
-		return localPlayerActionMsg{text: formatLocalPlayerAction("Stopped local player", status), status: status, err: nil}
+		return localPlayerActionMsg{text: formatLocalPlayerAction("Stopped local player", status), status: status, action: localPlayerActionStop, err: nil}
 	}
 }
 
@@ -117,13 +129,13 @@ func useLocalPlayerCmd(service app.PlayerService) tea.Cmd {
 	return func() tea.Msg {
 		err := callServiceContextMethod(service, "UseLocalPlayer")
 		if err != nil {
-			return localPlayerActionMsg{text: "Failed to select local player", err: err}
+			return localPlayerActionMsg{text: "Failed to select local player", action: localPlayerActionUse, err: err}
 		}
 		status, statusErr := getLocalPlayerStatus(service)
 		if statusErr != nil {
-			return localPlayerActionMsg{text: "Selected local player", err: nil}
+			return localPlayerActionMsg{text: "Selected local player", action: localPlayerActionUse, err: nil}
 		}
-		return localPlayerActionMsg{text: formatLocalPlayerAction("Selected local player", status), status: status, err: nil}
+		return localPlayerActionMsg{text: formatLocalPlayerAction("Selected local player", status), status: status, action: localPlayerActionUse, err: nil}
 	}
 }
 
@@ -131,13 +143,34 @@ func resetLocalPlayerCmd(service app.PlayerService) tea.Cmd {
 	return func() tea.Msg {
 		err := callServiceContextMethod(service, "ResetLocalPlayer")
 		if err != nil {
-			return localPlayerActionMsg{text: "Failed to reset local player", err: err}
+			return localPlayerActionMsg{text: "Failed to reset local player", action: localPlayerActionReset, err: err}
 		}
 		status, statusErr := getLocalPlayerStatus(service)
 		if statusErr != nil {
-			return localPlayerActionMsg{text: "Reset local player", err: nil}
+			return localPlayerActionMsg{text: "Reset local player", action: localPlayerActionReset, err: nil}
 		}
-		return localPlayerActionMsg{text: formatLocalPlayerAction("Reset local player", status), status: status, err: nil}
+		return localPlayerActionMsg{text: formatLocalPlayerAction("Reset local player", status), status: status, action: localPlayerActionReset, err: nil}
+	}
+}
+
+func recoverLocalPlayerCmd(service app.PlayerService) tea.Cmd {
+	return func() tea.Msg {
+		if err := service.ResetLocalPlayer(context.Background()); err != nil {
+			return localPlayerActionMsg{text: "Failed to reconnect local player after sleep", action: localPlayerActionRecover, err: err}
+		}
+		if err := service.StartLocalPlayer(context.Background()); err != nil {
+			return localPlayerActionMsg{text: "Failed to reconnect local player after sleep", action: localPlayerActionRecover, err: err}
+		}
+
+		status, err := getLocalPlayerStatus(service)
+		if err != nil {
+			return localPlayerActionMsg{text: "Reconnected local player after sleep", action: localPlayerActionRecover}
+		}
+		return localPlayerActionMsg{
+			text:   "Reconnected local player after sleep",
+			status: status,
+			action: localPlayerActionRecover,
+		}
 	}
 }
 
