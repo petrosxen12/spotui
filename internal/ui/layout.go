@@ -50,14 +50,21 @@ func (m *model) resize() {
 }
 
 func (m *model) resizeWithLayout(layout layoutMetrics) {
-	m.list.SetDelegate(resultDelegate{
-		width:       layout.mainWidth,
-		wideLayout:  !layout.widthCompact,
-		focused:     !m.inputFocused,
-		accentColor: m.vividAccentColor(),
-	})
+	m.setResultDelegate(layout)
 	m.list.SetSize(maxInt(20, layout.mainWidth), maxInt(1, layout.listHeight-layout.resultsChromeHeight))
 	m.input.Width = layout.inputWidth
+}
+
+func (m *model) setResultDelegate(layout layoutMetrics) {
+	m.list.SetDelegate(resultDelegate{
+		width:              layout.mainWidth,
+		wideLayout:         !layout.widthCompact,
+		focused:            !m.inputFocused,
+		accentColor:        m.vividAccentColor(),
+		trackBadgeColor:    m.trackBadgeColor(),
+		playlistBadgeColor: m.playlistBadgeColor(),
+		activeDeviceColor:  m.activeDeviceColor(),
+	})
 }
 
 func (m model) layoutMetrics() layoutMetrics {
@@ -202,6 +209,10 @@ func classifyHeightMode(height int) layoutHeightMode {
 }
 
 func (m model) listProgressText() string {
+	if m.listMode == listModeSearch {
+		return m.searchResultProgressText()
+	}
+
 	total := len(m.list.Items())
 	if total <= 1 {
 		return ""
@@ -217,6 +228,29 @@ func (m model) listProgressText() string {
 
 	percent := int(float64(index+1) / float64(total) * 100)
 	return renderListProgress(index, total) + fmt.Sprintf(" %d%%", percent)
+}
+
+func (m model) searchResultProgressText() string {
+	selectedIndex := m.list.Index()
+	total := 0
+	selectedResult := 0
+	for index, item := range m.list.Items() {
+		if _, ok := item.(resultItem); !ok {
+			continue
+		}
+		total++
+		if index <= selectedIndex {
+			selectedResult = total
+		}
+	}
+	if total <= 1 {
+		return ""
+	}
+	if selectedResult == 0 {
+		selectedResult = 1
+	}
+	percent := int(float64(selectedResult) / float64(total) * 100)
+	return renderListProgress(selectedResult-1, total) + fmt.Sprintf(" %d%%", percent)
 }
 
 func renderListProgress(index, total int) string {

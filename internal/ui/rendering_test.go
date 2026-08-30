@@ -2,12 +2,16 @@ package ui
 
 import (
 	"bytes"
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lucasb-eyer/go-colorful"
 	"github.com/petrosxen/spotui/internal/app"
 )
 
@@ -34,6 +38,55 @@ func TestDerivedAccentColorsSplitTextAndChrome(t *testing.T) {
 	}
 	if m.textAccentColor() == m.vividAccentColor() {
 		t.Fatalf("expected text and vivid accent colors to differ, got %q", m.textAccentColor())
+	}
+}
+
+func TestBadgeColorsAreDistinctHarmonicsOfDynamicAccent(t *testing.T) {
+	m := newModel(nil)
+	m.accentColor = "#8c7a69"
+
+	track := m.trackBadgeColor()
+	playlist := m.playlistBadgeColor()
+	if track == playlist {
+		t.Fatalf("badge colors should differ, both were %q", track)
+	}
+	if track == m.accentColor || playlist == m.accentColor {
+		t.Fatalf("badge colors should be derived from the accent, got track=%q playlist=%q", track, playlist)
+	}
+
+	baseColor, err := colorful.Hex(m.accentColor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseHue, _, _ := baseColor.Hcl()
+	assertBadgeHue := func(name, raw string, wantShift float64) {
+		t.Helper()
+		color, err := colorful.Hex(raw)
+		if err != nil {
+			t.Fatalf("%s badge color %q is invalid: %v", name, raw, err)
+		}
+		hue, chroma, lightness := color.Hcl()
+		wantHue := normalizeHue(baseHue + wantShift)
+		hueDelta := math.Abs(hue - wantHue)
+		hueDelta = math.Min(hueDelta, 360-hueDelta)
+		if hueDelta > 1 {
+			t.Fatalf("%s badge hue = %.2f, want %.2f (+/- 1)", name, hue, wantHue)
+		}
+		if chroma > 0.16 {
+			t.Fatalf("%s badge chroma = %.3f, want a subtle color", name, chroma)
+		}
+		if lightness < 0.47 || lightness > 0.65 {
+			t.Fatalf("%s badge lightness = %.3f, want balanced contrast", name, lightness)
+		}
+	}
+	assertBadgeHue("track", track, -28)
+	assertBadgeHue("playlist", playlist, 32)
+}
+
+func TestBadgeColorsRemainDistinctWithDefaultAccent(t *testing.T) {
+	m := newModel(nil)
+	if m.trackBadgeColor() == m.playlistBadgeColor() {
+		t.Fatalf("default badge colors should differ, both were %q", m.trackBadgeColor())
 	}
 }
 
@@ -132,6 +185,41 @@ func TestResultDelegateTruncatesLongRows(t *testing.T) {
 	}
 }
 
+func TestItemsFromDevicesPreservesActiveState(t *testing.T) {
+	items := itemsFromDevices([]app.Device{
+		{Name: "Living Room", Type: "Speaker", IsActive: true},
+		{Name: "Laptop", Type: "Computer"},
+	})
+
+	active, ok := items[0].(deviceItem)
+	if !ok {
+		t.Fatalf("items[0] type = %T, want deviceItem", items[0])
+	}
+	if !active.active {
+		t.Fatal("active device lost its active state")
+	}
+
+	inactive, ok := items[1].(deviceItem)
+	if !ok {
+		t.Fatalf("items[1] type = %T, want deviceItem", items[1])
+	}
+	if inactive.active {
+		t.Fatal("inactive device unexpectedly marked active")
+	}
+}
+
+func TestResultDelegateMarksActiveDeviceWithPersistentBadge(t *testing.T) {
+	items := itemsFromDevices([]app.Device{{Name: "Living Room", Type: "Speaker", IsActive: true}})
+	delegate := resultDelegate{width: 40, activeDeviceColor: "#789a88"}
+	model := list.New(items, delegate, 40, 3)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, model, 0, items[0])
+	if !strings.Contains(buf.String(), "● DEVICE") {
+		t.Fatalf("active device row missing persistent marker: %q", buf.String())
+	}
+}
+
 func TestItemsFromResultsDropsEntriesWithoutVisibleTitles(t *testing.T) {
 	items := itemsFromResults(app.Results{
 		Tracks: []app.SearchItem{
@@ -144,24 +232,159 @@ func TestItemsFromResultsDropsEntriesWithoutVisibleTitles(t *testing.T) {
 		},
 	})
 
-	if len(items) != 2 {
-		t.Fatalf("itemsFromResults() len = %d, want 2", len(items))
+	if len(items) != 4 {
+		t.Fatalf("itemsFromResults() len = %d, want 4", len(items))
 	}
 
-	track, ok := items[0].(resultItem)
+	tracksHeader, ok := items[0].(sectionHeaderItem)
 	if !ok {
-		t.Fatalf("items[0] type = %T, want resultItem", items[0])
+		t.Fatalf("items[0] type = %T, want sectionHeaderItem", items[0])
+	}
+	if tracksHeader.title != "Tracks" {
+		t.Fatalf("tracks header = %q, want %q", tracksHeader.title, "Tracks")
+	}
+
+	track, ok := items[1].(resultItem)
+	if !ok {
+		t.Fatalf("items[1] type = %T, want resultItem", items[1])
 	}
 	if track.title != "Visible Track" {
 		t.Fatalf("track title = %q, want %q", track.title, "Visible Track")
 	}
 
-	playlist, ok := items[1].(resultItem)
+	playlistsHeader, ok := items[2].(sectionHeaderItem)
 	if !ok {
-		t.Fatalf("items[1] type = %T, want resultItem", items[1])
+		t.Fatalf("items[2] type = %T, want sectionHeaderItem", items[2])
+	}
+	if playlistsHeader.title != "Playlists" {
+		t.Fatalf("playlists header = %q, want %q", playlistsHeader.title, "Playlists")
+	}
+
+	playlist, ok := items[3].(resultItem)
+	if !ok {
+		t.Fatalf("items[3] type = %T, want resultItem", items[3])
 	}
 	if playlist.title != "Visible Playlist" {
 		t.Fatalf("playlist title = %q, want %q", playlist.title, "Visible Playlist")
+	}
+}
+
+func TestItemsFromResultsOmitsEmptySection(t *testing.T) {
+	items := itemsFromResults(app.Results{
+		Playlists: []app.SearchItem{{Name: "Focus Mix", URI: "spotify:playlist:1"}},
+	})
+
+	if len(items) != 2 {
+		t.Fatalf("itemsFromResults() len = %d, want 2", len(items))
+	}
+	header, ok := items[0].(sectionHeaderItem)
+	if !ok || header.title != "Playlists" {
+		t.Fatalf("first item = %#v, want Playlists section header", items[0])
+	}
+}
+
+func TestSearchNavigationSkipsSectionHeaders(t *testing.T) {
+	items := itemsFromResults(app.Results{
+		Tracks: []app.SearchItem{
+			{Name: "Track One", URI: "spotify:track:1"},
+			{Name: "Track Two", URI: "spotify:track:2"},
+		},
+		Playlists: []app.SearchItem{{Name: "Playlist One", URI: "spotify:playlist:1"}},
+	})
+	delegate := resultDelegate{}
+	listModel := list.New(items, delegate, 80, 20)
+	selectFirstResult(&listModel)
+
+	assertSelected := func(wantTitle string) {
+		t.Helper()
+		selected, ok := listModel.SelectedItem().(resultItem)
+		if !ok {
+			t.Fatalf("selected item type = %T, want resultItem", listModel.SelectedItem())
+		}
+		if selected.title != wantTitle {
+			t.Fatalf("selected title = %q, want %q", selected.title, wantTitle)
+		}
+	}
+	assertSelected("Track One")
+
+	for _, want := range []string{"Track Two", "Playlist One"} {
+		listModel, _ = listModel.Update(tea.KeyMsg{Type: tea.KeyDown})
+		assertSelected(want)
+	}
+
+	listModel, _ = listModel.Update(tea.KeyMsg{Type: tea.KeyUp})
+	assertSelected("Track Two")
+}
+
+func TestSearchListRendersHeadedSectionsInOrder(t *testing.T) {
+	items := itemsFromResults(app.Results{
+		Tracks:    []app.SearchItem{{Name: "Track One", URI: "spotify:track:1"}},
+		Playlists: []app.SearchItem{{Name: "Playlist One", URI: "spotify:playlist:1"}},
+	})
+	delegate := resultDelegate{
+		width:              80,
+		wideLayout:         true,
+		trackBadgeColor:    "#6688aa",
+		playlistBadgeColor: "#aa8866",
+	}
+	listModel := list.New(items, delegate, 80, 20)
+	listModel.SetShowTitle(false)
+	listModel.SetShowStatusBar(false)
+	listModel.SetShowPagination(false)
+	listModel.SetShowHelp(false)
+	selectFirstResult(&listModel)
+
+	rendered := listModel.View()
+	positions := []int{
+		strings.Index(rendered, "Tracks"),
+		strings.Index(rendered, "Track One"),
+		strings.Index(rendered, "Playlists"),
+		strings.Index(rendered, "Playlist One"),
+	}
+	for index, position := range positions {
+		if position < 0 {
+			t.Fatalf("expected section content at position %d in %q", index, rendered)
+		}
+		if index > 0 && position <= positions[index-1] {
+			t.Fatalf("section content rendered out of order: %v", positions)
+		}
+	}
+}
+
+func TestSearchProgressIgnoresSectionHeaders(t *testing.T) {
+	m := newModel(nil)
+	m.listMode = listModeSearch
+	m.list.SetItems(itemsFromResults(app.Results{
+		Tracks:    []app.SearchItem{{Name: "Track One"}, {Name: "Track Two"}},
+		Playlists: []app.SearchItem{{Name: "Playlist One"}},
+	}))
+	m.list.Select(2)
+
+	progress := m.listProgressText()
+	want := renderListProgress(1, 3) + " 66%"
+	if progress != want {
+		t.Fatalf("search progress = %q, want result-only progress %q", progress, want)
+	}
+}
+
+func TestResultDelegateUsesDifferentBadgeColors(t *testing.T) {
+	m := newModel(nil)
+	m.accentColor = "#8c7a69"
+	delegate := resultDelegate{
+		trackBadgeColor:    m.trackBadgeColor(),
+		playlistBadgeColor: m.playlistBadgeColor(),
+	}
+
+	trackForeground := fmt.Sprint(delegate.badgeStyle("track", metaPillStyle).GetForeground())
+	playlistForeground := fmt.Sprint(delegate.badgeStyle("playlist", metaPillStyle).GetForeground())
+	if trackForeground == playlistForeground {
+		t.Fatalf("badge foregrounds should differ, both were %q", trackForeground)
+	}
+	if trackForeground != m.trackBadgeColor() {
+		t.Fatalf("track badge foreground = %q, want %q", trackForeground, m.trackBadgeColor())
+	}
+	if playlistForeground != m.playlistBadgeColor() {
+		t.Fatalf("playlist badge foreground = %q, want %q", playlistForeground, m.playlistBadgeColor())
 	}
 }
 

@@ -120,7 +120,7 @@ func qaScenarioSpecs() []qaScenarioSpec {
 					},
 				}
 				m.list.SetItems(itemsFromResults(m.lastResults))
-				m.list.Select(0)
+				selectFirstResult(&m.list)
 				m.resultCount = len(m.lastResults.Tracks) + len(m.lastResults.Playlists)
 				m.inputFocused = false
 				m.lastAction = `Loaded 4 results for "fka twigs"`

@@ -13,16 +13,34 @@ import (
 )
 
 type resultDelegate struct {
-	width       int
-	wideLayout  bool
-	focused     bool
-	accentColor string
+	width              int
+	wideLayout         bool
+	focused            bool
+	accentColor        string
+	trackBadgeColor    string
+	playlistBadgeColor string
+	activeDeviceColor  string
 }
 
 func (d resultDelegate) Height() int  { return 2 }
 func (d resultDelegate) Spacing() int { return 1 }
 
-func (d resultDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
+func (d resultDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return nil
+	}
+
+	direction := 0
+	switch keyMsg.String() {
+	case "up", "k", "left", "h", "pgup", "b", "u", "end", "G":
+		direction = -1
+	case "down", "j", "right", "l", "pgdown", "f", "d", "home", "g":
+		direction = 1
+	}
+	if direction != 0 {
+		skipSectionHeader(m, direction)
+	}
 	return nil
 }
 
@@ -37,10 +55,16 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		titleText = entry.title
 		descText = entry.description
 		metaText = strings.ToUpper(entry.kind)
+	case sectionHeaderItem:
+		fmt.Fprint(w, d.renderSectionHeader(entry))
+		return
 	case deviceItem:
 		titleText = entry.title
 		descText = entry.description
 		metaText = "DEVICE"
+		if entry.active {
+			metaText = "● DEVICE"
+		}
 	case infoItem:
 		titleText = entry.title
 		descText = entry.description
@@ -52,7 +76,7 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		return
 	}
 
-	line1 := d.renderPrimaryLine(titleText, metaText, selected)
+	line1 := d.renderPrimaryLine(titleText, metaText, selected, item)
 	descWidth := maxInt(1, d.contentWidth()-2)
 	line2 := "  " + d.descriptionStyle(selected).Render(truncateText(descText, descWidth))
 
@@ -65,7 +89,7 @@ func (d resultDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 	fmt.Fprint(w, strings.Join([]string{line1, line2}, "\n"))
 }
 
-func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, selected bool) string {
+func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, selected bool, item list.Item) string {
 	prefix := "  "
 	prefixStyle := lipgloss.NewStyle()
 	titleStyleToUse := rowTitleStyle
@@ -80,6 +104,11 @@ func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, sel
 			titleStyleToUse = selectedTitleStyle
 			metaStyleToUse = selectedDescStyle.Copy().Bold(true)
 		}
+	}
+	if result, ok := item.(resultItem); ok {
+		metaStyleToUse = d.badgeStyle(result.kind, metaStyleToUse)
+	} else if device, ok := item.(deviceItem); ok && device.active {
+		metaStyleToUse = metaStyleToUse.Copy().Foreground(lipgloss.Color(d.activeDeviceColor))
 	}
 
 	if !d.wideLayout || d.contentWidth() < 36 {
@@ -101,6 +130,28 @@ func (d resultDelegate) renderPrimaryLine(titleText string, metaText string, sel
 		gap = 2
 	}
 	return prefixStyle.Render(prefix) + left + strings.Repeat(" ", gap) + meta
+}
+
+func (d resultDelegate) renderSectionHeader(header sectionHeaderItem) string {
+	style := eyebrowStyle
+	switch header.kind {
+	case "track":
+		style = style.Copy().Foreground(lipgloss.Color(d.trackBadgeColor))
+	case "playlist":
+		style = style.Copy().Foreground(lipgloss.Color(d.playlistBadgeColor))
+	}
+	return "  " + style.Render(header.title) + "\n"
+}
+
+func (d resultDelegate) badgeStyle(kind string, base lipgloss.Style) lipgloss.Style {
+	switch kind {
+	case "track":
+		return base.Copy().Foreground(lipgloss.Color(d.trackBadgeColor))
+	case "playlist":
+		return base.Copy().Foreground(lipgloss.Color(d.playlistBadgeColor))
+	default:
+		return base
+	}
 }
 
 func (d resultDelegate) contentWidth() int {
@@ -131,10 +182,20 @@ func (i resultItem) Title() string       { return i.title }
 func (i resultItem) Description() string { return i.description }
 func (i resultItem) FilterValue() string { return i.title + " " + i.description + " " + i.kind }
 
+type sectionHeaderItem struct {
+	title string
+	kind  string
+}
+
+func (i sectionHeaderItem) Title() string       { return i.title }
+func (i sectionHeaderItem) Description() string { return "" }
+func (i sectionHeaderItem) FilterValue() string { return i.title }
+
 type deviceItem struct {
 	title       string
 	description string
 	id          string
+	active      bool
 }
 
 func (i deviceItem) Title() string       { return i.title }
@@ -152,7 +213,7 @@ func (i infoItem) Description() string { return i.description }
 func (i infoItem) FilterValue() string { return i.title + " " + i.description }
 
 func itemsFromResults(results app.Results) []list.Item {
-	items := make([]list.Item, 0, len(results.Tracks)+len(results.Playlists))
+	tracks := make([]list.Item, 0, len(results.Tracks))
 	for _, track := range results.Tracks {
 		title, ok := visibleResultTitle(track.Name)
 		if !ok {
@@ -162,13 +223,14 @@ func itemsFromResults(results app.Results) []list.Item {
 		if track.Subtitle != "" {
 			description = track.Subtitle
 		}
-		items = append(items, resultItem{
+		tracks = append(tracks, resultItem{
 			title:       title,
 			description: description,
 			kind:        "track",
 			uri:         track.URI,
 		})
 	}
+	playlists := make([]list.Item, 0, len(results.Playlists))
 	for _, playlist := range results.Playlists {
 		title, ok := visibleResultTitle(playlist.Name)
 		if !ok {
@@ -178,14 +240,55 @@ func itemsFromResults(results app.Results) []list.Item {
 		if playlist.Subtitle != "" {
 			description = "playlist by " + playlist.Subtitle
 		}
-		items = append(items, resultItem{
+		playlists = append(playlists, resultItem{
 			title:       title,
 			description: description,
 			kind:        "playlist",
 			uri:         playlist.URI,
 		})
 	}
+
+	items := make([]list.Item, 0, len(tracks)+len(playlists)+2)
+	if len(tracks) > 0 {
+		items = append(items, sectionHeaderItem{title: "Tracks", kind: "track"})
+		items = append(items, tracks...)
+	}
+	if len(playlists) > 0 {
+		items = append(items, sectionHeaderItem{title: "Playlists", kind: "playlist"})
+		items = append(items, playlists...)
+	}
 	return items
+}
+
+func selectFirstResult(m *list.Model) {
+	for index, item := range m.Items() {
+		if _, ok := item.(resultItem); ok {
+			m.Select(index)
+			return
+		}
+	}
+	m.Select(0)
+}
+
+func skipSectionHeader(m *list.Model, direction int) {
+	if _, ok := m.SelectedItem().(sectionHeaderItem); !ok {
+		return
+	}
+
+	items := m.Items()
+	start := m.Index()
+	for index := start + direction; index >= 0 && index < len(items); index += direction {
+		if _, ok := items[index].(resultItem); ok {
+			m.Select(index)
+			return
+		}
+	}
+	for index := start - direction; index >= 0 && index < len(items); index -= direction {
+		if _, ok := items[index].(resultItem); ok {
+			m.Select(index)
+			return
+		}
+	}
 }
 
 func visibleResultTitle(name string) (string, bool) {
@@ -212,6 +315,7 @@ func itemsFromDevices(devices []app.Device) []list.Item {
 			title:       device.Name,
 			description: state,
 			id:          device.ID,
+			active:      device.IsActive,
 		})
 	}
 	return items

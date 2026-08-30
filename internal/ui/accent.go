@@ -17,6 +17,13 @@ import (
 )
 
 func (m *model) refreshAccentColor() tea.Cmd {
+	previousAccent := m.accentColor
+	defer func() {
+		if previousAccent != m.accentColor && m.width > 0 && m.height > 0 {
+			m.setResultDelegate(m.layoutMetrics())
+		}
+	}()
+
 	if m.playback.AlbumArtURL == "" {
 		m.accentColor = ""
 		m.accentColorPending = ""
@@ -111,6 +118,50 @@ func (m model) vividAccentColor() string {
 		return base
 	}
 	return chrome.Clamped().Hex()
+}
+
+func (m model) trackBadgeColor() string {
+	return m.harmonicAccentColor(-28)
+}
+
+func (m model) playlistBadgeColor() string {
+	return m.harmonicAccentColor(32)
+}
+
+func (m model) activeDeviceColor() string {
+	return m.harmonicAccentColor(0)
+}
+
+// harmonicAccentColor keeps secondary UI colors related to the album-art
+// accent while reducing their chroma so badges remain supporting elements.
+func (m model) harmonicAccentColor(hueShift float64) string {
+	base := m.baseAccentColor()
+	color, err := colorful.Hex(base)
+	if err != nil {
+		return base
+	}
+	h, c, l := color.Hcl()
+	if math.IsNaN(h) {
+		return base
+	}
+
+	harmonic := colorful.Hcl(
+		normalizeHue(h+hueShift),
+		clampFloat(c*0.68+0.035, 0.07, 0.15),
+		clampFloat(0.57-(l-0.5)*0.14, 0.48, 0.64),
+	)
+	if !harmonic.IsValid() {
+		return base
+	}
+	return harmonic.Clamped().Hex()
+}
+
+func normalizeHue(h float64) float64 {
+	h = math.Mod(h, 360)
+	if h < 0 {
+		h += 360
+	}
+	return h
 }
 
 func dominantColorFromImageURL(rawURL string) (string, error) {
