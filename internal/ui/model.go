@@ -180,7 +180,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastResults = msg.results
 		m.listMode = listModeSearch
 		m.list.SetItems(itemsFromResults(msg.results))
-		m.list.Select(0)
+		selectFirstResult(&m.list)
 		m.resultCount = len(msg.results.Tracks) + len(msg.results.Playlists)
 		actionCmd := m.setLastAction(fmt.Sprintf("Loaded %d results for %q", m.resultCount, msg.query), false)
 		m.clearBanner()
@@ -308,6 +308,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.accentColorCache[msg.albumArtURL] = msg.color
 			if m.playback.AlbumArtURL == msg.albumArtURL {
 				m.accentColor = msg.color
+				if m.width > 0 && m.height > 0 {
+					m.setResultDelegate(m.layoutMetrics())
+				}
 			}
 		}
 		return m, nil
@@ -441,7 +444,11 @@ func (m *model) popViewState() bool {
 	m.lastResults = snapshot.lastResults
 	m.resultCount = snapshot.resultCount
 	m.list.SetItems(snapshot.listItems)
-	m.list.Select(0)
+	if snapshot.listMode == listModeSearch {
+		selectFirstResult(&m.list)
+	} else {
+		m.list.Select(0)
+	}
 	m.input.SetValue(snapshot.inputValue)
 	m.lastAction = snapshot.lastAction
 	m.lastActionErr = snapshot.lastActionErr
