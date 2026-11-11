@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/petrosxen12/spotui/compare/spotui-v0.2.0...spotui-v0.3.0) (2026-11-11)
+
+
+### Features
+
+* update terminal tab title with current song ([4203d42](https://github.com/petrosxen12/spotui/commit/4203d42ca1ee3adc3b828933fa0fc70b473a717a))
+* update terminal title with current track ([d21f516](https://github.com/petrosxen12/spotui/commit/d21f516a46f16284262413dc9556042e1c35c7e0))
+
 ## [0.2.0](https://github.com/petrosxen12/spotui/compare/spotui-v0.1.0...spotui-v0.2.0) (2026-08-31)
 
 
