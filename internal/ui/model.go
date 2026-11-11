@@ -73,6 +73,7 @@ type viewState struct {
 
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
+		tea.SetWindowTitle(playbackWindowTitle(m.playback)),
 		textinput.Blink,
 		checkConnectionCmd(m.service),
 		fetchPlaybackCmd(m.service),
@@ -258,13 +259,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, actionCmd
 	case playbackMsg:
 		if msg.err == nil {
+			previousTitle := playbackWindowTitle(m.playback)
 			m.playback = msg.state
 			m.pollFailures = 0
 			m.pollEvery = nextPollInterval(msg.state)
 			m.clearBanner()
-			if cmd := m.refreshAccentColor(); cmd != nil {
-				return m, tea.Batch(pollPlaybackCmd(m.pollEvery), cmd)
+			var titleCmd tea.Cmd
+			if title := playbackWindowTitle(m.playback); title != previousTitle {
+				titleCmd = tea.SetWindowTitle(title)
 			}
+			return m, tea.Batch(pollPlaybackCmd(m.pollEvery), m.refreshAccentColor(), titleCmd)
 		} else {
 			m.pollFailures++
 			m.setLastAction(msg.err.Error(), true)
