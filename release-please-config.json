@@ -4,6 +4,7 @@
     ".": {
       "release-type": "go",
       "package-name": "spotui",
+      "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md"
     }
   }
