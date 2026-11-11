@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.1](https://github.com/petrosxen12/spotui/compare/v0.3.0...v0.3.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* limit release binaries to Linux ([e9ee127](https://github.com/petrosxen12/spotui/commit/e9ee12791bafabe302bda448acb8dca439539ebf))
+* limit release binaries to Linux ([05e4f4e](https://github.com/petrosxen12/spotui/commit/05e4f4e4afae71ac32a47f2b74157d1fb2075fe9))
+* publish binaries when release-please creates a release ([b4f94e2](https://github.com/petrosxen12/spotui/commit/b4f94e2a36c80aa92b5e984e8f5cb398f579e35f))
+* publish binaries when release-please creates a release ([0af184b](https://github.com/petrosxen12/spotui/commit/0af184b0998c0fcf1b735185cbfdf014ea3442f3))
+
 ## [0.3.0](https://github.com/petrosxen12/spotui/compare/spotui-v0.2.0...spotui-v0.3.0) (2026-11-11)
 
 
